@@ -5,7 +5,7 @@ export const userSchema = new Schema<User>(
   {
     userId: { type: String, required: true, unique: true },
     userName: { type: String, required: true },
-    shragaId: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
   },
   {
     timestamps: true,

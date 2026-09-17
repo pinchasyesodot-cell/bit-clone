@@ -2,6 +2,7 @@ import express, { type Application } from "express";
 import { config } from "./config/env.js";
 import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
+import userRouter from "./router/user.router.js";
 
 const port = config.PORT;
 
@@ -26,6 +27,7 @@ class Server {
         next();
       },
     );
+    this.app.use("api/users", userRouter)
   };
   public start = async (): Promise<void> => {
     try {
