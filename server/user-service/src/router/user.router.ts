@@ -1,7 +1,10 @@
 import { Router } from "express";
 import { UserController } from "../controller/user.controller.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
-import { userValidationSchema } from "../validations/user.validation.js";
+import {
+  loginValidationSchema,
+  userValidationSchema,
+} from "../validations/user.validation.js";
 
 class UserRouter {
   public router: Router;
@@ -15,6 +18,12 @@ class UserRouter {
       validateRequest(userValidationSchema, "body"),
       UserController.createUser,
     );
+    this.router.post(
+      "/login",
+      validateRequest(loginValidationSchema, "body"),
+      UserController.login,
+    );
+    
   };
 }
 

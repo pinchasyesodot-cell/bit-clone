@@ -62,4 +62,12 @@ export const errorHndeler: ErrorRequestHandler = (
       .json({ error: err.details.map((detail) => detail.message).join(", ") });
     return;
   }
+  if (err.name === "JsonWebTokenError") {
+    logger.error("JWT Error:", {
+      message: err.message,
+      stack: err.stack,
+    });
+    res.status(401).json({ error: "Unauthorized: Invalid token" });
+    return;
+  }
 };

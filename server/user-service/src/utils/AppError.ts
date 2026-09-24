@@ -5,3 +5,9 @@ export class AppError extends Error {
     this.statusCode = statusCode;
   }
 }
+
+export class NotFound extends AppError {
+    constructor(message: string) {
+        super(message, 404);
+    }
+}
