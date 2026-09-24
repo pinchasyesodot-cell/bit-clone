@@ -25,10 +25,12 @@
   },
   "dependencies": {
     "amqplib": "^2.0.1",
+    "bcrypt-ts": "^9.0.2",
     "dotenv": "^17.4.2",
     "env-var": "^7.5.0",
     "express": "^5.2.1",
     "joi": "^18.2.9",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.1",
     "winston": "^3.19.0"
   }

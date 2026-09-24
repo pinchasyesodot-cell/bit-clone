@@ -3,9 +3,14 @@ import type { User } from "../interfaces/userType.js";
 
 export const userSchema = new Schema<User>(
   {
-    userId: { type: String, required: true, unique: true },
-    userName: { type: String, required: true },
-    password: { type: String, required: true },
+    userId: {
+      type: Number,
+      required: true,
+      unique: true,
+      maxlength: 9,
+    },
+    userName: { type: String, required: true, trim: true },
+    password: { type: String, required: true, trim: true, minlength: 6 },
   },
   {
     timestamps: true,
