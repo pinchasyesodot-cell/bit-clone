@@ -19,6 +19,7 @@ export const userSchema = new Schema<User>(
         delete ret.__v;
         delete ret.updatedAt;
         delete ret.password;
+        delete ret._id
         return ret;
       },
     },

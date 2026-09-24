@@ -25,9 +25,8 @@ class Server {
           `Incoming request: method: ${req.method}, url: ${req.url}, IP: ${req.ip}`,
         );
         next();
-      },
-    );
-    this.app.use("api/users", userRouter)
+      });
+    this.app.use("/api/users", userRouter);
   };
   public start = async (): Promise<void> => {
     try {

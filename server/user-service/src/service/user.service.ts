@@ -26,4 +26,12 @@ export class UserService {
     const token = JWT.generateToken(result, config.JWT_SECRET, "1h");
     return { ...result, token };
   };
+
+  static getUserByUserId = async (
+    userId: number,
+  ): Promise<UserWithoutPassword> => {
+    const userData = await UserRepository.getUserByUserId(userId);
+    if (!userData) throw new NotFound("User not found");
+    return userData
+  }
 }

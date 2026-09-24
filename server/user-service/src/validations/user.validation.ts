@@ -14,7 +14,7 @@ export const loginValidationSchema = joi.object({
 });
 
 export const userValidationSchema = loginValidationSchema.append<User>({
-  userId: joi.number().required().integer().min(9).max(9).messages({
+  userId: joi.number().required().integer().min(100000000).max(999999999).messages({
     "number.empty": "User ID is required",
     "number.integer": "User ID must be an integer",
     "number.min": "User ID must be exactly 9 digits long",

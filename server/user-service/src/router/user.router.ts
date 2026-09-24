@@ -5,6 +5,7 @@ import {
   loginValidationSchema,
   userValidationSchema,
 } from "../validations/user.validation.js";
+import { validateToken } from "../validations/token.validation.js";
 
 class UserRouter {
   public router: Router;
@@ -23,7 +24,7 @@ class UserRouter {
       validateRequest(loginValidationSchema, "body"),
       UserController.login,
     );
-    
+    this.router.get("/profile",validateToken, UserController.getUserByUserId);
   };
 }
 

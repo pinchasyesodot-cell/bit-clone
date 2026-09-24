@@ -7,14 +7,21 @@ export class UserRepository {
     return (await newUser.save()).toJSON();
   };
 
-  static getUserByName = async (
-    userName: string,
-  ): Promise<User | null> => {
+  static getUserByName = async (userName: string): Promise<User | null> => {
     return await userModel
       .findOne({ userName })
       .lean()
-      .select(" -__v -updatedAt -createdAt")
+      .select(" -_id -__v -updatedAt -createdAt ")
       .exec();
   };
-  
+
+  static getUserByUserId = async (
+    userId: number,
+  ): Promise<UserWithoutPassword | null> => {
+    return await userModel
+      .findOne({ userId })
+      .lean()
+      .select(" -_id -password -__v -updatedAt -createdAt ")
+      .exec();
+  };
 }
