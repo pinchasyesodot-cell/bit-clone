@@ -18,6 +18,7 @@ export const userSchema = new Schema<User>(
       transform: (_doc, ret: Record<string, unknown>) => {
         delete ret.__v;
         delete ret.updatedAt;
+        delete ret.password;
         return ret;
       },
     },
