@@ -13,3 +13,5 @@ export interface Saga {
     amount: number;
     status: SagaStatus;
 }
+
+export type SagaWithoutIdAndStatus = Omit<Saga, "sagaId" | "status">;
