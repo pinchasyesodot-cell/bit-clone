@@ -3,7 +3,7 @@ import { config } from "./config/env.js";
 import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
 import sagaRouter from "./router/saga.router.js";
-
+import { SagaService } from "./service/saga.service.js";
 const port = config.PORT;
 
 class Server {
@@ -25,6 +25,7 @@ class Server {
     public start = async (): Promise<void> => {
         try {
             await database.connect();
+            await SagaService.consumeSagaMessages();
             this.app.listen(port, () => {
                 logger.info(`Server is running on port ${port}`);
             });
