@@ -20,7 +20,7 @@ class Server {
             next();
         });
 
-        this.app.use("api/saga", sagaRouter);
+        this.app.use("/api/saga", sagaRouter);
     };
     public start = async (): Promise<void> => {
         try {
