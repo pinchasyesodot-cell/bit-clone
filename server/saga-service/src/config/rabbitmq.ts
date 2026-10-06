@@ -1,6 +1,6 @@
 import amqp from "amqplib";
 import { config } from "../config/env.js";
-import type { Saga } from "../interfaces/SagaType.js";
+import type { Saga, SagaCommand } from "../interfaces/SagaType.js";
 
 class RabbitMQConfig {
     private connection: amqp.ChannelModel | null;
@@ -17,7 +17,7 @@ class RabbitMQConfig {
         return this.connection;
     };
 
-    public publishMessage = async (queueName: string, message: Saga): Promise<boolean> => {
+    public publishMessage = async (queueName: string, message: SagaCommand): Promise<boolean> => {
         const connection = await this.connect();
         if (!connection) {
             throw new Error("RabbitMQ connection is not established.");
