@@ -8,7 +8,7 @@ export class SagaService {
         const sagaId = uuidv4();
         const status = SagaStatus.PENDING;
         const newSaga = await SagaRepository.createSaga({ ...saga, sagaId, status });
-        await rabbitMQConfig.publishMessage("saga_queue", newSaga);
+        await rabbitMQConfig.publishMessage("saga_queue", { type: "DEBIT_COMMAND", payload: newSaga });
         return newSaga;
     };
 }
