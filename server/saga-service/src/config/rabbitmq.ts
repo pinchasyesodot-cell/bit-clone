@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import { config } from "../config/env.js";
 import type { SagaCommand } from "../interfaces/SagaType.js";
 import { logger } from "../utils/logger.js";
+import { AppError } from "../utils/AppError.js";
 
 class RabbitMQConfig {
     private connection: amqp.ChannelModel | null;
@@ -13,7 +14,7 @@ class RabbitMQConfig {
 
     private connect = async (): Promise<amqp.ChannelModel | null> => {
         if (!this.connection) {
-            this.connection = await amqp.connect(config.RABBITMQ_URI || "amqp://localhost");
+            this.connection = await amqp.connect(config.RABBITMQ_URI);
         }
         return this.connection;
     };
@@ -21,7 +22,7 @@ class RabbitMQConfig {
     public publishMessage = async (queueName: string, message: SagaCommand): Promise<boolean> => {
         const connection = await this.connect();
         if (!connection) {
-            throw new Error("RabbitMQ connection is not established.");
+            throw new AppError("RabbitMQ connection is not established.", 500);
         }
         if (!this.channel) {
             this.channel = await connection.createChannel();
@@ -50,6 +51,11 @@ class RabbitMQConfig {
                     channel.ack(msg);
                 } catch (error) {
                     logger.error(`Error processing message: ${error}`);
+                    if (error instanceof SyntaxError) {
+                        logger.error(`Invalid JSON format: ${msg.content.toString()}`);
+                        channel.nack(msg, false, false);
+                        return;
+                    }
                     channel.nack(msg, false, true);
                 }
             }

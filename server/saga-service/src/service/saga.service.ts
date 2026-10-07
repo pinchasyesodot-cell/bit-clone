@@ -2,6 +2,7 @@ import { SagaStatus, type Saga, type SagaWithoutIdAndStatus } from "../interface
 import { v4 as uuidv4 } from "uuid";
 import { SagaRepository } from "../repository/saga.repository.js";
 import { rabbitMQConfig } from "../config/rabbitmq.js";
+import { AppError, NotFound } from "../utils/AppError.js";
 
 export class SagaService {
     static createSaga = async (saga: SagaWithoutIdAndStatus):Promise<Saga> => {
@@ -18,7 +19,7 @@ export class SagaService {
             const { sagaId, status } = payload;
             const updatedSaga = await SagaRepository.updateSagaStatus(sagaId, status);
             if (!updatedSaga) {
-                throw new Error(`Saga with ID ${sagaId} not found.`);
+                throw new NotFound(`Saga with ID ${sagaId} not found.`);
             }
             if (type === "DEBIT_COMMAND" && status === SagaStatus.COMPLETED) {
                 await rabbitMQConfig.publishMessage("credit_queue", {

@@ -8,8 +8,8 @@ export enum SagaStatus {
 
 export interface Saga {
     sagaId: string;
-    senderId: string;
-    receiverId: string;
+    senderId: number;
+    receiverId: number;
     amount: number;
     status: SagaStatus;
 }

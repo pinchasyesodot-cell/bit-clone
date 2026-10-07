@@ -4,6 +4,7 @@ import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
 import sagaRouter from "./router/saga.router.js";
 import { SagaService } from "./service/saga.service.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
 const port = config.PORT;
 
 class Server {
@@ -19,8 +20,8 @@ class Server {
             logger.info(`Incoming request: method: ${req.method}, url: ${req.url}, IP: ${req.ip}`);
             next();
         });
-
         this.app.use("/api/saga", sagaRouter);
+        this.app.use(errorHandler);
     };
     public start = async (): Promise<void> => {
         try {

@@ -1,6 +1,7 @@
 import { connect } from "mongoose";
 import { config } from "./env.js";
 import { logger } from "../utils/logger.js";
+import { AppError } from "../utils/AppError.js";
 
 class Database {
     public connect = async (): Promise<void> => {
@@ -12,7 +13,7 @@ class Database {
             logger.info("Connected to MongoDB successfully");
         } catch (error) {
             logger.error("Failed to connect to MongoDB:", { cause: error });
-            throw new Error("Failed to connect to MongoDB:");
+            throw new AppError("Failed to connect to MongoDB:", 500);
         }
     };
 }
