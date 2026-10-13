@@ -1,30 +1,32 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /src/app
 
-COPY package*.json ./
+COPY package*.json .npmrc ./
 
-COPY .npmrc ./
-
-RUN npm install
+RUN npm ci
 
 COPY . .
 
 RUN npm run build
 
 
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 WORKDIR /src/app
 
-COPY package*.json ./
+ENV NODE_ENV=production
 
-COPY .npmrc ./
+COPY package*.json .npmrc ./
+
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /src/app/dist ./dist
 
-RUN npm install --production
+RUN mkdir -p logs && chown node:node logs
 
-EXPOSE 3000
+USER node
 
-CMD ["node", "app.js"]
+EXPOSE 4000
+
+CMD ["node", "dist/index.js"]

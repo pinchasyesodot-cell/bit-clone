@@ -10,7 +10,7 @@ export const logger = winston.createLogger({
     ],
 });
 
-if (config.NODE_ENV === "development") {
+if (config.NODE_ENV !== "test") {
     logger.add(
         new winston.transports.Console({
             format: winston.format.combine(
