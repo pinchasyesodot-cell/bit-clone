@@ -10,6 +10,7 @@ on:
     paths:
       - "server/user-service/**"
       - ".github/workflows/user-service.yml"
+  workflow_dispatch:
 
 defaults:
   run:
