@@ -7,7 +7,7 @@
     "lint": "eslint .",
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p ./tsconfig.build.json",
-    "start": "tsx src/index.ts",
+    "start": "node dist/index.js",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watchAll",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit"
