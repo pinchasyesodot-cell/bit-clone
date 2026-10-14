@@ -8,4 +8,5 @@ export const config = {
     NODE_ENV: env.get("NODE_ENV").required().asString(),
     MONGO_URI: env.get("MONGO_URI").required().asString(),
     JWT_SECRET: env.get("JWT_SECRET").required().asString(),
+    URL_CLIENT: env.get("URL_CLIENT").asString()
 };
