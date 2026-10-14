@@ -209,5 +209,11 @@ describe("User API Endpoints", () => {
             const res = await request(server.app).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
             expect(res.status).toBe(404);
         });
+
+        it("returns 404 on an unknown route", async () => {
+            const res = await request(server.app).get("/api/users/does-not-exist");
+            expect(res.status).toBe(404);
+            expect(res.body).toHaveProperty("error", "Route not found");
+        });
     });
 });

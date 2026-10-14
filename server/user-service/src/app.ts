@@ -4,6 +4,7 @@ import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
 import userRouter from "./router/user.router.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
+import { NotFound } from "./utils/AppError.js";
 
 const port = config.PORT;
 
@@ -13,13 +14,16 @@ class Server {
         this.app = express();
         this.initMiddlewares();
     }
+
     private initMiddlewares = (): void => {
+        this.app.set("trust proxy", 1);
         this.app.use(express.json());
         this.app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
             logger.info(`Incoming request: method: ${req.method}, url: ${req.url}, IP: ${req.ip}`);
             next();
         });
         this.app.use("/api/users", userRouter);
+        this.app.use((_req, _res, next) => next(new NotFound("Route not found")));
         this.app.use(errorHandler);
     };
     public start = async (): Promise<void> => {
