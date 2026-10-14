@@ -1,34 +1,32 @@
-version: "3.8"
-
 services:
   user-db:
-    image: mongo:latest
+    image: mongo:7
     restart: always
     container_name: db-user-service
     ports:
       - "27017:27017"
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     volumes:
       - user-db-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{ _id: 0, host: 'user-db:27017' }]}) }"]
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"]
       interval: 5s
       timeout: 5s
-      retries: 3
+      retries: 5
       start_period: 10s
   user-service:
     build:
       context: ./user-service
     restart: always
-    env_file: ./user-service/.env
+    env_file:
+      - ./user-service/.env
+      - ./user-service/.env.docker
     container_name: user-service
-    ports:
-      - "${PORT}:${PORT}"
     volumes:
-      - ./user-service:/src/app
-      - ./user-service/node_modules:/src/app/node_modules
+      - user-service-logs:/src/app/logs
     depends_on:
-      - user-db
+      user-db:
+        condition: service_healthy
   nginx:
     image: nginx:latest
     container_name: nginx_server
@@ -40,3 +38,4 @@ services:
       - user-service
 volumes:
   user-db-data:
+  user-service-logs:
