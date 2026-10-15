@@ -1,0 +1,41 @@
+services:
+  user-db:
+    image: mongo:7
+    restart: always
+    container_name: db-user-service
+    ports:
+      - "27017:27017"
+    volumes:
+      - user-db-data:/data/db
+    healthcheck:
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  user-service:
+    build:
+      context: ./user-service
+    restart: always
+    env_file:
+      - ./user-service/.env
+      - ./user-service/.env.docker
+    container_name: user-service
+    volumes:
+      - user-service-logs:/src/app/logs
+    depends_on:
+      user-db:
+        condition: service_healthy
+  nginx:
+    image: nginx:latest
+    container_name: nginx_server
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - user-service
+volumes:
+  user-db-data:
+  user-service-logs:
