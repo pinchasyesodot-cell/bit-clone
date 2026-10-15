@@ -1,6 +1,5 @@
 import request from "supertest";
 import jwt from "jsonwebtoken";
-import mongoose from "mongoose";
 import server from "../src/app.js";
 import database from "../src/config/db.js";
 import { userModel } from "../src/models/User.js";
@@ -17,7 +16,7 @@ describe("User API Endpoints", () => {
 
     afterAll(async () => {
         await userModel.deleteMany({ userId: { $in: usedIds } });
-        await mongoose.disconnect();
+        await database.disconnect();
     });
 
     // ---------------------------------------------------------------

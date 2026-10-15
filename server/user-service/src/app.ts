@@ -7,7 +7,7 @@ import database from "./config/db.js";
 import userRouter from "./router/user.router.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { NotFound } from "./utils/AppError.js";
-import type { Server as HttpServer } from "http";
+import type { Server as HttpServer } from "node:http";
 
 const port = config.PORT;
 
@@ -20,7 +20,6 @@ class Server {
         this.initHealthCheck();
         this.initRoutes();
         this.initErrorHandling();
-        this.handleGracefulShutdown();
     }
 
     private initMiddlewares = (): void => {
@@ -59,42 +58,52 @@ class Server {
         this.app.use((_req, _res, next) => next(new NotFound("Route not found")));
         this.app.use(errorHandler);
     };
-    
+
     public start = async (): Promise<void> => {
         try {
             await database.connect();
             this.server = this.app.listen(port, () => {
                 logger.info(`Server is running on port ${port}`);
             });
+            this.handleGracefulShutdown();
         } catch (error) {
             logger.error(`Error starting server: ${error}`);
             process.exit(1);
         }
     };
 
+    private isShuttingDown = false;
     private handleGracefulShutdown = (): void => {
-        const shutdown = async (signal: string) => {
+        const shutdown = async (signal: string, exitCode = 0) => {
+            if (this.isShuttingDown) return;
+            this.isShuttingDown = true;
             logger.info(`Received ${signal}. Shutting down gracefully...`);
+
             this.server.close(async () => {
-                logger.info("HTTP server closed.");
-                await database.disconnect();
-                logger.info("MongoDB disconnected.");
-                process.exit(0);
+                try {
+                    logger.info("HTTP server closed.");
+                    await database.disconnect();
+                    process.exit(exitCode);
+                } catch (error) {
+                    logger.error(`Error during shutdown: ${error}`);
+                    process.exit(1);
+                }
             });
+
             setTimeout(() => {
                 logger.error("Could not close connections in time, forcefully shutting down");
                 process.exit(1);
-            }, 10000);
+            }, 10000).unref();
         };
         process.on("SIGTERM", () => shutdown("SIGTERM"));
         process.on("SIGINT", () => shutdown("SIGINT"));
         process.on("uncaughtException", (err) => {
             logger.error(`Uncaught Exception: ${err.message}`);
-            shutdown("uncaughtException");
+            shutdown("uncaughtException", 1);
         });
         process.on("unhandledRejection", (reason) => {
             logger.error(`Unhandled Rejection: ${reason}`);
-            shutdown("unhandledRejection");
+            shutdown("unhandledRejection", 1);
         });
     };
 }
