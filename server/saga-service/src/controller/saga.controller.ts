@@ -5,8 +5,9 @@ import type { Request, Response } from "express";
 
 export class SagaController {
     static createSaga = wrapAsync(async (req: Request, res: Response) => {
-        const saga: SagaWithoutIdAndStatus = req.body;
-        const newSaga = await SagaService.createSaga(saga);
+        const body: SagaWithoutIdAndStatus = req.body;
+        const newSaga = await SagaService.createSaga(body);
         res.status(201).json(newSaga);
     });
 }
+

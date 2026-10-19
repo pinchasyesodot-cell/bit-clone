@@ -4,6 +4,7 @@ import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
 import sagaRouter from "./router/saga.router.js";
 import { SagaService } from "./service/saga.service.js";
+
 const port = config.PORT;
 
 class Server {
@@ -11,8 +12,8 @@ class Server {
     constructor() {
         this.app = express();
         this.initMiddlewares();
-        this.start();
     }
+
     private initMiddlewares = (): void => {
         this.app.use(express.json());
         this.app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
@@ -22,10 +23,13 @@ class Server {
 
         this.app.use("/api/saga", sagaRouter);
     };
+
+
     public start = async (): Promise<void> => {
         try {
             await database.connect();
             await SagaService.consumeSagaMessages();
+
             this.app.listen(port, () => {
                 logger.info(`Server is running on port ${port}`);
             });
@@ -37,3 +41,4 @@ class Server {
 }
 
 const server = new Server();
+export default server;

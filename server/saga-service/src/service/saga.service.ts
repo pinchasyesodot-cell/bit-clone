@@ -7,7 +7,7 @@ export class SagaService {
     static createSaga = async (saga: SagaWithoutIdAndStatus):Promise<Saga> => {
         const sagaId = uuidv4();
         const status = SagaStatus.PENDING;
-        const newSaga = await SagaRepository.createSaga({ ...saga, sagaId, status });
+        const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
         await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
         return newSaga;
     };
@@ -16,7 +16,7 @@ export class SagaService {
         await rabbitMQConfig.consumeMessages("saga_response_queue", async (msg) => {
             const { type, payload } = msg;
             const { sagaId, status } = payload;
-            const updatedSaga = await SagaRepository.updateSagaStatus(sagaId, status);
+            const updatedSaga = await SagaRepository.updateStatus(sagaId, status);
             if (!updatedSaga) {
                 throw new Error(`Saga with ID ${sagaId} not found.`);
             }
