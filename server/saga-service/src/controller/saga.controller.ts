@@ -10,4 +10,3 @@ export class SagaController {
         res.status(201).json(newSaga);
     });
 }
-

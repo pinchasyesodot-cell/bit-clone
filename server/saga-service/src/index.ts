@@ -1,3 +1,3 @@
-import server from "./app.js"
+import server from "./app.js";
 
-await server.start()
+await server.start();

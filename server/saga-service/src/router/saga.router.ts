@@ -10,13 +10,8 @@ class SagaRouter {
     }
 
     private initializeRoutes(): void {
-        this.router.post(
-            "/",
-            SagaController.createSaga,
-        );
-
+        this.router.post("/", SagaController.createSaga);
     }
 }
 
 export default new SagaRouter().router;
-

@@ -14,7 +14,7 @@ export interface Saga {
     status: SagaStatus;
 }
 
-export type SagaWithoutIdAndStatus = Omit<Saga, "sagaId" | "status" >;
+export type SagaWithoutIdAndStatus = Omit<Saga, "sagaId" | "status">;
 
 export interface SagaCommand {
     type: "DEBIT_COMMAND" | "CREDIT_COMMAND" | "REFUND_COMMAND";
