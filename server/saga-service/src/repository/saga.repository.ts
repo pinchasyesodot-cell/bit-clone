@@ -14,11 +14,7 @@ export class SagaRepository {
     };
 
     static findByIdempotencyKey = async (key: string): Promise<Saga | null> => {
-        return sagaModel
-            .findOne({ idempotencyKey: key })
-            .lean()
-            .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga | null>;
+        return sagaModel.findOne({ idempotencyKey: key }).lean().select(EXCLUDED_FIELDS).exec() as Promise<Saga | null>;
     };
 
     static updateStatus = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
@@ -28,16 +24,15 @@ export class SagaRepository {
             .select(EXCLUDED_FIELDS)
             .exec() as Promise<Saga | null>;
     };
-    
+
     static findTimedOut = async (cutoff: Date): Promise<Saga[]> => {
         return sagaModel
             .find({
                 status: { $in: [SagaStatus.PENDING, SagaStatus.PROCESSING] },
-                startedAt: { $lt: cutoff },
+                updatedAt: { $lt: cutoff },
             })
             .lean()
             .select(EXCLUDED_FIELDS)
             .exec() as Promise<Saga[]>;
     };
 }
-

@@ -12,7 +12,7 @@ class Database {
             logger.info("Connected to MongoDB successfully");
         } catch (error) {
             logger.error("Failed to connect to MongoDB:", { cause: error });
-            throw new Error("Failed to connect to MongoDB:");
+            throw new Error(`Failed to connect to MongoDB:${error}`, { cause: error });
         }
     };
 }

@@ -24,12 +24,11 @@ class Server {
         this.app.use("/api/saga", sagaRouter);
     };
 
-
     public start = async (): Promise<void> => {
         try {
             await database.connect();
             await SagaService.consumeSagaMessages();
-
+            setInterval(() => SagaService.handleTimeouts(), 10000).unref();
             this.app.listen(port, () => {
                 logger.info(`Server is running on port ${port}`);
             });

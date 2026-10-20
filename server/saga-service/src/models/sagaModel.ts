@@ -27,4 +27,6 @@ const sagaSchema = new Schema<Saga>(
     }
 );
 
+sagaSchema.index({ status: 1, updatedAt: 1 });
+
 export const sagaModel = model<Saga>("Saga", sagaSchema);

@@ -2,14 +2,44 @@ import { SagaStatus, type Saga, type SagaWithoutIdAndStatus } from "../interface
 import { v4 as uuidv4 } from "uuid";
 import { SagaRepository } from "../repository/saga.repository.js";
 import { rabbitMQConfig } from "../config/rabbitmq.js";
+import { api } from "../api/base.api.js";
+import { logger } from "../utils/logger.js";
 
 export class SagaService {
-    static createSaga = async (saga: SagaWithoutIdAndStatus):Promise<Saga> => {
+    static isProcessing = false;
+
+    static createSaga = async (saga: SagaWithoutIdAndStatus): Promise<Saga> => {
         const sagaId = uuidv4();
         const status = SagaStatus.PENDING;
         const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
         await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
         return newSaga;
+    };
+
+    static handleTimeouts = async () => {
+        if (this.isProcessing) return;
+        this.isProcessing = true;
+        try {
+            const cutoff = new Date(Date.now() - 10000);
+            const timedOutSagas = await SagaRepository.findTimedOut(cutoff);
+            for (const saga of timedOutSagas) {
+                try {
+                    const response = await api.get(`/${saga.sagaId}`);
+                    if (response.data.status === SagaStatus.COMPLETED) {
+                        await SagaRepository.updateStatus(saga.sagaId, SagaStatus.COMPLETED);
+                    } else {
+                        await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: saga });
+                        await SagaRepository.updateStatus(saga.sagaId, SagaStatus.COMPENSATING);
+                    }
+                } catch (error) {
+                    logger.error(`Timeout handling failed for saga ${saga.sagaId}: ${error}`);
+                }
+            }
+        } catch (error) {
+            logger.error(`General error in handleTimeouts: ${error}`);
+        } finally {
+            this.isProcessing = false;
+        }
     };
 
     static consumeSagaMessages = async (): Promise<void> => {
