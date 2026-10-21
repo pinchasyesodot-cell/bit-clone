@@ -13,10 +13,6 @@ export class SagaRepository {
         return sagaModel.findOne({ sagaId }).lean().select(EXCLUDED_FIELDS).exec() as Promise<Saga | null>;
     };
 
-    static findByIdempotencyKey = async (key: string): Promise<Saga | null> => {
-        return sagaModel.findOne({ idempotencyKey: key }).lean().select(EXCLUDED_FIELDS).exec() as Promise<Saga | null>;
-    };
-
     static updateStatus = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
         return sagaModel
             .findOneAndUpdate({ sagaId }, { status }, { new: true })
@@ -34,5 +30,13 @@ export class SagaRepository {
             .lean()
             .select(EXCLUDED_FIELDS)
             .exec() as Promise<Saga[]>;
+    };
+
+    static transition = async (sagaId: string, from: SagaStatus[], to: SagaStatus): Promise<Saga | null> => {
+        return sagaModel
+            .findOneAndUpdate({ sagaId, status: { $in: from } }, { status: to }, { new: true })
+            .lean()
+            .select(EXCLUDED_FIELDS)
+            .exec() as Promise<Saga | null>;
     };
 }
