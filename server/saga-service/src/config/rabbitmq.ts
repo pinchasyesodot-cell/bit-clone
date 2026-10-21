@@ -1,6 +1,6 @@
 import amqp from "amqplib";
 import { config } from "../config/env.js";
-import type { SagaCommand } from "../interfaces/SagaType.js";
+import type { SagaCommand, SagaResponse } from "../interfaces/SagaType.js";
 import { logger } from "../utils/logger.js";
 
 class RabbitMQConfig {
@@ -32,7 +32,10 @@ class RabbitMQConfig {
         return result;
     };
 
-    public consumeMessages = async (queueName: string, callback: (msg: SagaCommand) => void): Promise<void> => {
+    public consumeMessages = async (
+        queueName: string,
+        callback: (msg: SagaResponse) => Promise<void>
+    ): Promise<void> => {
         const connection = await this.connect();
         if (!connection) {
             throw new Error("RabbitMQ connection is not established.");
@@ -42,14 +45,18 @@ class RabbitMQConfig {
         }
         const channel = this.channel;
         await channel.assertQueue(queueName, { durable: true });
-        await channel.consume(queueName, (msg) => {
+        await channel.consume(queueName, async (msg) => {
             if (msg !== null) {
                 try {
-                    const sagaCommand: SagaCommand = JSON.parse(msg.content.toString());
-                    callback(sagaCommand);
+                    const response: SagaResponse = JSON.parse(msg.content.toString());
+                    await callback(response);
                     channel.ack(msg);
                 } catch (error) {
                     logger.error(`Error processing message: ${error}`);
+                    if (error instanceof SyntaxError) {
+                        channel.nack(msg, false, false);
+                        return;
+                    }
                     channel.nack(msg, false, true);
                 }
             }
