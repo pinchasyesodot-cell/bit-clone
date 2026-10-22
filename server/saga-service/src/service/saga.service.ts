@@ -56,42 +56,72 @@ export class SagaService {
         await rabbitMQConfig.consumeMessages("saga_response_queue", async (msg) => {
             const { type, payload } = msg;
             const { sagaId, success } = payload;
-            if (type === "DEBIT_RESPONSE") {
-                if (!success) {
-                    return void (await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.FAILED));
-                }
-                const saga = await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.PROCESSING);
-                if (!saga) {
-                    logger.warn(`Ignoring stale DEBIT_RESPONSE for ${sagaId}`);
-                    return;
-                }
-                await rabbitMQConfig.publishMessage("credit_queue", { type: "CREDIT_COMMAND", payload: saga });
-            } else if (type === "CREDIT_RESPONSE") {
-                if (success) {
-                    await SagaRepository.transition(
-                        sagaId,
-                        [SagaStatus.PROCESSING, SagaStatus.COMPENSATING],
-                        SagaStatus.COMPLETED
-                    );
-                } else {
-                    const saga = await SagaRepository.transition(
-                        sagaId,
-                        [SagaStatus.PROCESSING],
-                        SagaStatus.COMPENSATING
-                    );
-                    if (!saga) {
-                        logger.warn(`Ignoring stale CREDIT_RESPONSE for ${sagaId}`);
-                        return;
-                    }
-                    await rabbitMQConfig.publishMessage("refund_queue", {
-                        type: "REFUND_COMMAND",
-                        payload: saga,
-                    });
-                }
-            } else if (type === "REFUND_RESPONSE") {
-                if (success) await SagaRepository.transition(sagaId, [SagaStatus.COMPENSATING], SagaStatus.FAILED);
-                else logger.error(`Refund failed for ${sagaId}; stays COMPENSATING and will be retried`);
+            switch (type) {
+                case "DEBIT_RESPONSE":
+                    await this.handleDebitResponse(sagaId, success);
+                    break;
+                case "CREDIT_RESPONSE":
+                    await this.handleCreditResponse(sagaId, success);
+                    break;
+                case "REFUND_RESPONSE":
+                    await this.handleRefundResponse(sagaId, success);
+                    break;
+                default:
+                    logger.warn(`Unknown message type: ${type}`);
             }
         });
+    };
+
+    private static handleDebitResponse = async (sagaId: string, success: boolean): Promise<void> => {
+        if (!success) {
+            const saga = await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.FAILED);
+            if (!saga) {
+                logger.warn(`Ignoring stale FAILED_RESPONSE for ${sagaId}`);
+                return;
+            }
+            return;
+        }
+        const saga = await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.PROCESSING);
+        if (!saga) {
+            logger.warn(`Ignoring stale DEBIT_RESPONSE for ${sagaId}`);
+            return;
+        }
+        await rabbitMQConfig.publishMessage("credit_queue", { type: "CREDIT_COMMAND", payload: saga });
+    };
+
+    private static handleCreditResponse = async (sagaId: string, success: boolean): Promise<void> => {
+        if (!success) {
+            const saga = await SagaRepository.transition(sagaId, [SagaStatus.PROCESSING], SagaStatus.COMPENSATING);
+            if (!saga) {
+                logger.warn(`Ignoring stale CREDIT_RESPONSE for ${sagaId}`);
+                return;
+            }
+            await rabbitMQConfig.publishMessage("refund_queue", {
+                type: "REFUND_COMMAND",
+                payload: saga,
+            });
+            return;
+        }
+        const saga = await SagaRepository.transition(
+            sagaId,
+            [SagaStatus.PROCESSING, SagaStatus.COMPENSATING],
+            SagaStatus.COMPLETED
+        );
+        if (!saga) {
+            logger.warn(`Ignoring stale CREDIT_RESPONSE for ${sagaId}`);
+            return;
+        }
+    };
+
+    private static handleRefundResponse = async (sagaId: string, success: boolean): Promise<void> => {
+        if (success) {
+            const saga = await SagaRepository.transition(sagaId, [SagaStatus.COMPENSATING], SagaStatus.FAILED);
+            if (!saga) {
+                logger.warn(`Ignoring stale Refund_RESPONSE for ${sagaId}`);
+                return;
+            }
+        } else {
+            logger.error(`Refund failed for ${sagaId}; stays COMPENSATING and will be retried`);
+        }
     };
 }
