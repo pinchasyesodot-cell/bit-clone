@@ -28,7 +28,7 @@ class Server {
         try {
             await database.connect();
             await SagaService.consumeSagaMessages();
-            setInterval(() => void SagaService.handleTimeouts(), 10000).unref();
+            setInterval(() => void SagaService.handleTimeouts(), 3000).unref();
             this.app.listen(port, () => {
                 logger.info(`Server is running on port ${port}`);
             });

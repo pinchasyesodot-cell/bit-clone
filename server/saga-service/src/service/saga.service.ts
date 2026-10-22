@@ -7,6 +7,7 @@ import { logger } from "../utils/logger.js";
 
 export class SagaService {
     static isProcessing = false;
+    static SAGA_TIMEOUT_MS = 10000;
 
     static createSaga = async (saga: SagaWithoutIdAndStatus): Promise<Saga> => {
         const sagaId = uuidv4();
@@ -20,7 +21,7 @@ export class SagaService {
         if (this.isProcessing) return;
         this.isProcessing = true;
         try {
-            const cutoff = new Date(Date.now() - 10000);
+            const cutoff = new Date(Date.now() - this.SAGA_TIMEOUT_MS);
             const timedOutSagas = await SagaRepository.findTimedOut(cutoff);
             for (const saga of timedOutSagas) {
                 try {

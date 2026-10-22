@@ -45,20 +45,17 @@ class RabbitMQConfig {
         }
         const channel = this.channel;
         await channel.assertQueue(queueName, { durable: true });
+        await channel.prefetch(1);
         await channel.consume(queueName, async (msg) => {
-            if (msg !== null) {
-                try {
-                    const response: SagaResponse = JSON.parse(msg.content.toString());
-                    await callback(response);
-                    channel.ack(msg);
-                } catch (error) {
-                    logger.error(`Error processing message: ${error}`);
-                    if (error instanceof SyntaxError) {
-                        channel.nack(msg, false, false);
-                        return;
-                    }
-                    channel.nack(msg, false, true);
-                }
+            if (msg === null) return;
+            try {
+                const response: SagaResponse = JSON.parse(msg.content.toString());
+                await callback(response);
+                channel.ack(msg);
+            } catch (error) {
+                logger.error(`Error processing message: ${error}`);
+                const requeue = !(error instanceof SyntaxError) && !msg.fields.redelivered;
+                channel.nack(msg, false, requeue);
             }
         });
     };
