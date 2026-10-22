@@ -9,18 +9,6 @@ export class SagaRepository {
         return (await doc.save()).toJSON() as Saga;
     };
 
-    static findById = async (sagaId: string): Promise<Saga | null> => {
-        return sagaModel.findOne({ sagaId }).lean().select(EXCLUDED_FIELDS).exec() as Promise<Saga | null>;
-    };
-
-    static updateStatus = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
-        return sagaModel
-            .findOneAndUpdate({ sagaId }, { status }, { new: true })
-            .lean()
-            .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga | null>;
-    };
-
     static findTimedOut = async (cutoff: Date): Promise<Saga[]> => {
         return sagaModel
             .find({
