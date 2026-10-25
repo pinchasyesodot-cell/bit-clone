@@ -4,6 +4,7 @@ import { SagaRepository } from "../repository/saga.repository.js";
 import { rabbitMQConfig } from "../config/rabbitmq.js";
 import { api } from "../api/base.api.js";
 import { logger } from "../utils/logger.js";
+import socketIo from "./socket.service.js";
 
 export class SagaService {
     static isProcessing = false;
@@ -17,7 +18,7 @@ export class SagaService {
         return newSaga;
     };
 
-    static handleTimeouts = async () => {
+    static handleTimeouts = async (): Promise<void> => {
         if (this.isProcessing) return;
         this.isProcessing = true;
         try {
@@ -37,17 +38,20 @@ export class SagaService {
         }
     };
 
-    private static reconcile = async (saga: Saga) => {
+    private static reconcile = async (saga: Saga): Promise<void> => {
         const { data } = await api.get<AccountsSagaState>(`/${saga.sagaId}`);
         const open = [SagaStatus.PENDING, SagaStatus.PROCESSING];
         if (data.credited) {
-            await SagaRepository.transition(saga.sagaId, open, SagaStatus.COMPLETED);
+            const done = await SagaRepository.transition(saga.sagaId, open, SagaStatus.COMPLETED);
+            if (done) socketIo.emitToUser(done.senderId, "saga:completed", done);
         } else if (data.refunded) {
-            await SagaRepository.transition(saga.sagaId, open, SagaStatus.FAILED);
+            const failed = await SagaRepository.transition(saga.sagaId, open, SagaStatus.FAILED);
+            if (failed) socketIo.emitToUser(failed.senderId, "saga:failed", failed);
         } else {
             const updated = await SagaRepository.transition(saga.sagaId, open, SagaStatus.COMPENSATING);
             if (updated) {
                 await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: updated });
+                socketIo.emitToUser(saga.senderId, "saga:compensating", updated);
             }
         }
     };
@@ -79,6 +83,7 @@ export class SagaService {
                 logger.warn(`Ignoring stale FAILED_RESPONSE for ${sagaId}`);
                 return;
             }
+            socketIo.emitToUser(saga.senderId, "saga:failed", saga);
             return;
         }
         const saga = await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.PROCESSING);
@@ -87,6 +92,7 @@ export class SagaService {
             return;
         }
         await rabbitMQConfig.publishMessage("credit_queue", { type: "CREDIT_COMMAND", payload: saga });
+        socketIo.emitToUser(saga.senderId, "saga:processing", saga);
     };
 
     private static handleCreditResponse = async (sagaId: string, success: boolean): Promise<void> => {
@@ -100,6 +106,7 @@ export class SagaService {
                 type: "REFUND_COMMAND",
                 payload: saga,
             });
+            socketIo.emitToUser(saga.senderId, "saga:compensating", saga);
             return;
         }
         const saga = await SagaRepository.transition(
@@ -111,6 +118,7 @@ export class SagaService {
             logger.warn(`Ignoring stale CREDIT_RESPONSE for ${sagaId}`);
             return;
         }
+        socketIo.emitToUser(saga.senderId, "saga:completed", saga);
     };
 
     private static handleRefundResponse = async (sagaId: string, success: boolean): Promise<void> => {
@@ -120,6 +128,7 @@ export class SagaService {
                 logger.warn(`Ignoring stale Refund_RESPONSE for ${sagaId}`);
                 return;
             }
+            socketIo.emitToUser(saga.senderId, "saga:failed", saga);
         } else {
             logger.error(`Refund failed for ${sagaId}; stays COMPENSATING and will be retried`);
         }

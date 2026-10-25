@@ -4,11 +4,15 @@ import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
 import sagaRouter from "./router/saga.router.js";
 import { SagaService } from "./service/saga.service.js";
+import socketIo from "./service/socket.service.js";
+import type { Server as HttpServer } from "node:http";
 
 const port = config.PORT;
 
 class Server {
     public app: Application;
+    private server!: HttpServer;
+
     constructor() {
         this.app = express();
         this.initMiddlewares();
@@ -27,11 +31,12 @@ class Server {
     public start = async (): Promise<void> => {
         try {
             await database.connect();
-            await SagaService.consumeSagaMessages();
-            setInterval(() => void SagaService.handleTimeouts(), 3000).unref();
-            this.app.listen(port, () => {
+            this.server = this.app.listen(port, () => {
                 logger.info(`Server is running on port ${port}`);
             });
+            socketIo.initSocket(this.server);
+            await SagaService.consumeSagaMessages();
+            setInterval(() => void SagaService.handleTimeouts(), 3000).unref();
         } catch (error) {
             logger.error(`Error starting server: ${error}`);
             process.exit(1);

@@ -40,6 +40,7 @@
     "joi": "^18.2.9",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.2",
+    "socket.io": "^4.8.4",
     "uuid": "^14.0.2",
     "winston": "^3.19.0"
   }
