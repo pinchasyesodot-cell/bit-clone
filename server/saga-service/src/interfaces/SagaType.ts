@@ -16,6 +16,8 @@ export interface Saga {
 
 export type SagaWithoutIdAndStatus = Omit<Saga, "sagaId" | "status">;
 
+export type bodySaga = Omit<Saga, "sagaId" | "status" | "senderId">;
+
 export interface SagaCommand {
     type: "DEBIT_COMMAND" | "CREDIT_COMMAND" | "REFUND_COMMAND";
     payload: Saga;
