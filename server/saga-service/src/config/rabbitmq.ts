@@ -2,6 +2,7 @@ import amqp from "amqplib";
 import { config } from "../config/env.js";
 import type { SagaCommand, SagaResponse } from "../interfaces/SagaType.js";
 import { logger } from "../utils/logger.js";
+import { AppError } from "../utils/AppError.js";
 
 class RabbitMQConfig {
     private connection: amqp.ChannelModel | null;
@@ -21,7 +22,7 @@ class RabbitMQConfig {
     public publishMessage = async (queueName: string, message: SagaCommand): Promise<boolean> => {
         const connection = await this.connect();
         if (!connection) {
-            throw new Error("RabbitMQ connection is not established.");
+            throw new AppError("RabbitMQ connection is not established.", 500);
         }
         if (!this.channel) {
             this.channel = await connection.createChannel();
@@ -38,7 +39,7 @@ class RabbitMQConfig {
     ): Promise<void> => {
         const connection = await this.connect();
         if (!connection) {
-            throw new Error("RabbitMQ connection is not established.");
+            throw new AppError("RabbitMQ connection is not established.", 500);
         }
         if (!this.channel) {
             this.channel = await connection.createChannel();
