@@ -6,6 +6,8 @@ import sagaRouter from "./router/saga.router.js";
 import { SagaService } from "./service/saga.service.js";
 import socketIo from "./service/socket.service.js";
 import type { Server as HttpServer } from "node:http";
+import { errorHandler } from "./middlewares/errorHandler.js";
+import { NotFound } from "./utils/AppError.js";
 
 const port = config.PORT;
 
@@ -26,6 +28,8 @@ class Server {
         });
 
         this.app.use("/api/saga", sagaRouter);
+        this.app.use((_req, _res, next) => next(new NotFound("Route not found")));
+        this.app.use(errorHandler);
     };
 
     public start = async (): Promise<void> => {

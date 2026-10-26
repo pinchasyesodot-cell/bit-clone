@@ -5,12 +5,16 @@ import { rabbitMQConfig } from "../config/rabbitmq.js";
 import { api } from "../api/base.api.js";
 import { logger } from "../utils/logger.js";
 import socketIo from "./socket.service.js";
+import { AppError } from "../utils/AppError.js";
 
 export class SagaService {
     static isProcessing = false;
     static SAGA_TIMEOUT_MS = 10000;
 
     static createSaga = async (saga: SagaWithoutIdAndStatus): Promise<Saga> => {
+        if (saga.senderId === saga.receiverId) {
+            throw new AppError("Cannot send money to yourself", 400);
+        }
         const sagaId = uuidv4();
         const status = SagaStatus.PENDING;
         const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
