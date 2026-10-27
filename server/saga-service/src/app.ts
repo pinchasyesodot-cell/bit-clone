@@ -1,4 +1,6 @@
 import express, { type Application } from "express";
+import helmet from "helmet";
+import cors from "cors";
 import { config } from "./config/env.js";
 import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
@@ -21,7 +23,15 @@ class Server {
     }
 
     private initMiddlewares = (): void => {
-        this.app.use(express.json());
+        this.app.set("trust proxy", 1);
+        this.app.use(helmet());
+        this.app.use(
+            cors({
+                origin: config.URL_CLIENT,
+                exposedHeaders: ["Authorization"],
+            })
+        );
+        this.app.use(express.json({ limit: "10kb" }));
         this.app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
             logger.info(`Incoming request: method: ${req.method}, url: ${req.url}, IP: ${req.ip}`);
             next();
