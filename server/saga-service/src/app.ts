@@ -9,7 +9,7 @@ import { SagaService } from "./service/saga.service.js";
 import socketIo from "./service/socket.service.js";
 import type { Server as HttpServer } from "node:http";
 import { errorHandler } from "./middlewares/errorHandler.js";
-import { AppError, NotFound } from "./utils/AppError.js";
+import { NotFound } from "./utils/AppError.js";
 
 const port = config.PORT;
 
@@ -40,15 +40,15 @@ class Server {
             next();
         });
     };
+
     private initHealthCheck = (): void => {
         this.app.get("/health", (_req, res) => {
-            const isDbConnected = database.isConnected();
-            if (isDbConnected) {
+            if (database.isConnected()) {
                 res.status(200).json({ status: "OK", db: "Connected" });
-            } else {
-                logger.error("Health check failed: Database is not connected");
-                new AppError("Database is not connected", 503);
+                return;
             }
+            logger.error("Health check failed: Database is not connected");
+            res.status(503).json({ status: "Error", db: "Not connected" });
         });
     };
 
