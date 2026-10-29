@@ -1,10 +1,10 @@
 services:
   user-db:
     image: mongo:7
-    restart: always
+    restart: unless-stopped
     container_name: db-user-service
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - user-db-data:/data/db
     healthcheck:
@@ -17,7 +17,7 @@ services:
   user-service:
     build:
       context: ./user-service
-    restart: always
+    restart: unless-stopped
     env_file:
       - ./user-service/.env
       - ./user-service/.env.docker
