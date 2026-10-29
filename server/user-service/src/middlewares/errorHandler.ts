@@ -4,6 +4,13 @@ import { logger } from "../utils/logger.js";
 import type { ErrorRequestHandler } from "express";
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void => {
+    if (err instanceof Joi.ValidationError) {
+        logger.error("Joi Validation Error:", {
+            details: err.details,
+        });
+        res.status(400).json({ error: err.details.map((detail) => detail.message).join(", ") });
+        return;
+    }
     if (err.name === "MongoServerError" && err.code === 11000) {
         logger.error("MongoDB Duplicate Key Error:", {
             message: err.message,
@@ -47,13 +54,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
             res.status(500).json({ error: "Internal Server Error" });
             return;
         }
-    }
-    if (err instanceof Joi.ValidationError) {
-        logger.error("Joi Validation Error:", {
-            details: err.details,
-        });
-        res.status(400).json({ error: err.details.map((detail) => detail.message).join(", ") });
-        return;
     }
     if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
         logger.error("JWT Error:", {
