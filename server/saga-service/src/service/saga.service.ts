@@ -84,7 +84,7 @@ export class SagaService {
         if (!success) {
             const saga = await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.FAILED);
             if (!saga) {
-                logger.warn(`Ignoring stale FAILED_RESPONSE for ${sagaId}`);
+                logger.warn(`Ignoring stale DEBIT_RESPONSE (failure) for ${sagaId}`);
                 return;
             }
             socketIo.emitToUser(saga.senderId, "saga:failed", saga);
