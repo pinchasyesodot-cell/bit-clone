@@ -8,6 +8,13 @@ import { config } from "../src/config/env.js";
 const testUser = { userId: 123456789, userName: "testUser", password: "Test1234!" };
 const usedIds = [testUser.userId, 100000000, 999999999, 111111111, 987654321];
 
+const assertTestDatabase = (): void => {
+    if (!new URL(config.MONGO_URI).pathname.endsWith("-test")) {
+        throw new Error("Refusing to run: MONGO_URI must point to a database whose name ends with -test");
+    }
+};
+assertTestDatabase();
+
 describe("User API Endpoints", () => {
     beforeAll(async () => {
         await database.connect();
