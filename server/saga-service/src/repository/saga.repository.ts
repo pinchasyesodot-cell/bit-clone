@@ -22,7 +22,7 @@ export class SagaRepository {
 
     static transition = async (sagaId: string, from: SagaStatus[], to: SagaStatus): Promise<Saga | null> => {
         return sagaModel
-            .findOneAndUpdate({ sagaId, status: { $in: from } }, { status: to }, { new: true })
+            .findOneAndUpdate({ sagaId, status: { $in: from } }, { status: to }, { returnDocument: "after" })
             .lean()
             .select(EXCLUDED_FIELDS)
             .exec() as Promise<Saga | null>;
