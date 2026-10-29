@@ -5,6 +5,8 @@ import { Hash } from "../utils/hash.js";
 import { JWT } from "../utils/jwt.js";
 import { config } from "../config/env.js";
 
+const dummyHashString = await Hash.hashPassword("not-a-real-password");
+
 export class UserService {
     static createUser = async (user: User): Promise<UserWithoutPassword> => {
         const hashedPassword = await Hash.hashPassword(user.password);
@@ -14,9 +16,8 @@ export class UserService {
 
     static login = async (user: UserLogin): Promise<UserWithoutPassword & { token: string }> => {
         const userData = await UserRepository.getUserByName(user.userName);
-        if (!userData) throw new AppError("Invalid credentials", 401);
-        const isMatch = await Hash.comparePassword(user.password, userData.password);
-        if (!isMatch) throw new AppError("Invalid credentials", 401);
+        const isMatch = await Hash.comparePassword(user.password, userData?.password ?? dummyHashString);
+        if (!userData || !isMatch) throw new AppError("Invalid credentials", 401);
         const { password, ...result } = userData;
         const token = JWT.generateToken(result, config.JWT_SECRET, "1h");
         return { ...result, token };
