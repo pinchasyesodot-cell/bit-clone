@@ -8,5 +8,5 @@ export const config = {
     RABBITMQ_URI: env.get("RABBITMQ_URI").required().asString(),
     URL_ACCOUNTS: env.get("URL_ACCOUNTS").required().asString(),
     JWT_SECRET: env.get("JWT_SECRET").required().asString(),
-    URL_CLIENT: env.get("URL_CLIENT").asString(),
+    URL_CLIENT: env.get("URL_CLIENT").required().asString(),
 };
