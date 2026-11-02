@@ -3,14 +3,20 @@ import jwt from "jsonwebtoken";
 import { config } from "../src/config/env.js";
 import type { Saga } from "../src/interfaces/SagaType.js";
 
-const mockPublish = jest.fn<(queue: string, message: unknown) => Promise<boolean>>();
+const mockPublish = jest.fn<(queue: string, message: unknown) => Promise<void>>();
 const mockCreate = jest.fn<(saga: Saga) => Promise<Saga>>();
 
 jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
     rabbitMQConfig: { publishMessage: mockPublish, consumeMessages: jest.fn() },
 }));
 jest.unstable_mockModule("../src/repository/saga.repository.js", () => ({
-    SagaRepository: { create: mockCreate, transition: jest.fn(), findTimedOut: jest.fn() },
+    SagaRepository: {
+        create: mockCreate,
+        transition: jest.fn(),
+        findTimedOut: jest.fn(),
+        findStuckCompensating: jest.fn(),
+        touch: jest.fn(),
+    },
 }));
 jest.unstable_mockModule("../src/utils/logger.js", () => ({
     logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -30,7 +36,7 @@ const postSaga = (body: unknown, authorization: string | null = `Bearer ${token}
 describe("POST /api/saga", () => {
     beforeEach(() => {
         mockCreate.mockImplementation(async (saga) => saga);
-        mockPublish.mockResolvedValue(true);
+        mockPublish.mockResolvedValue(undefined);
     });
 
     it("creates a PENDING saga for the user in the token and publishes a DEBIT_COMMAND", async () => {
@@ -93,9 +99,21 @@ describe("POST /api/saga", () => {
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it("answers with a generic 500 and no internal details when RabbitMQ fails", async () => {
+    it("still accepts the transfer when RabbitMQ is down: the timeout check resolves it", async () => {
         mockPublish.mockRejectedValue(new Error("amqp://user:secret@rabbitmq is down"));
+
         const res = await postSaga({ receiverId: "987654321", amount: 10 });
+
+        expect(res.status).toBe(201);
+        expect(res.body.status).toBe("PENDING");
+        expect(JSON.stringify(res.body)).not.toContain("secret");
+    });
+
+    it("answers with a generic 500 and no internal details when the database fails", async () => {
+        mockCreate.mockRejectedValue(new Error("mongodb://user:secret@db is down"));
+
+        const res = await postSaga({ receiverId: "987654321", amount: 10 });
+
         expect(res.status).toBe(500);
         expect(res.body).toEqual({ error: "Internal Server Error" });
     });

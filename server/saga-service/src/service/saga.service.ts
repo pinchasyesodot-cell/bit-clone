@@ -1,4 +1,10 @@
-import { SagaStatus, type AccountsSagaState, type Saga, type SagaWithoutIdAndStatus } from "../interfaces/SagaType.js";
+import {
+    ALREADY_CREDITED,
+    SagaStatus,
+    type AccountsSagaState,
+    type Saga,
+    type SagaWithoutIdAndStatus,
+} from "../interfaces/SagaType.js";
 import { v4 as uuidv4 } from "uuid";
 import { SagaRepository } from "../repository/saga.repository.js";
 import { rabbitMQConfig } from "../config/rabbitmq.js";
@@ -10,6 +16,7 @@ import { AppError } from "../utils/AppError.js";
 export class SagaService {
     static isProcessing = false;
     static SAGA_TIMEOUT_MS = 10000;
+    static REFUND_RETRY_MS = 10000;
 
     static createSaga = async (saga: SagaWithoutIdAndStatus): Promise<Saga> => {
         if (saga.senderId === saga.receiverId) {
@@ -18,7 +25,13 @@ export class SagaService {
         const sagaId = uuidv4();
         const status = SagaStatus.PENDING;
         const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
-        await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
+        try {
+            await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
+        } catch (error) {
+            logger.error(
+                `Debit command of saga ${sagaId} was not confirmed, the timeout check will resolve it: ${error}`
+            );
+        }
         return newSaga;
     };
 
@@ -35,10 +48,25 @@ export class SagaService {
                     logger.error(`Timeout handling failed for saga ${saga.sagaId}: ${error}`);
                 }
             }
+            await this.resendUnconfirmedRefunds();
         } catch (error) {
             logger.error(`General error in handleTimeouts: ${error}`);
         } finally {
             this.isProcessing = false;
+        }
+    };
+
+    private static resendUnconfirmedRefunds = async (): Promise<void> => {
+        const cutoff = new Date(Date.now() - this.REFUND_RETRY_MS);
+        const waiting = await SagaRepository.findStuckCompensating(cutoff);
+        for (const saga of waiting) {
+            try {
+                logger.warn(`No answer to the refund of saga ${saga.sagaId}, sending it again`);
+                await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: saga });
+                await SagaRepository.touch(saga.sagaId, SagaStatus.COMPENSATING);
+            } catch (error) {
+                logger.error(`Failed to resend refund command for saga ${saga.sagaId}: ${error}`);
+            }
         }
     };
 
@@ -63,7 +91,7 @@ export class SagaService {
     static consumeSagaMessages = async (): Promise<void> => {
         await rabbitMQConfig.consumeMessages("saga_response_queue", async (msg) => {
             const { type, payload } = msg;
-            const { sagaId, success } = payload;
+            const { sagaId, success, error } = payload;
             switch (type) {
                 case "DEBIT_RESPONSE":
                     await this.handleDebitResponse(sagaId, success);
@@ -72,7 +100,7 @@ export class SagaService {
                     await this.handleCreditResponse(sagaId, success);
                     break;
                 case "REFUND_RESPONSE":
-                    await this.handleRefundResponse(sagaId, success);
+                    await this.handleRefundResponse(sagaId, success, error);
                     break;
                 default:
                     logger.warn(`Unknown message type: ${type}`);
@@ -125,7 +153,7 @@ export class SagaService {
         socketIo.emitToUser(saga.senderId, "saga:completed", saga);
     };
 
-    private static handleRefundResponse = async (sagaId: string, success: boolean): Promise<void> => {
+    private static handleRefundResponse = async (sagaId: string, success: boolean, error?: string): Promise<void> => {
         if (success) {
             const saga = await SagaRepository.transition(sagaId, [SagaStatus.COMPENSATING], SagaStatus.FAILED);
             if (!saga) {
@@ -133,8 +161,19 @@ export class SagaService {
                 return;
             }
             socketIo.emitToUser(saga.senderId, "saga:failed", saga);
-        } else {
-            logger.error(`Refund failed for ${sagaId}; stays COMPENSATING and will be retried`);
+            return;
         }
+        if (error === ALREADY_CREDITED) {
+            const saga = await SagaRepository.transition(sagaId, [SagaStatus.COMPENSATING], SagaStatus.COMPLETED);
+            if (!saga) {
+                logger.warn(`Ignoring stale Refund_RESPONSE for ${sagaId}`);
+                return;
+            }
+            socketIo.emitToUser(saga.senderId, "saga:completed", saga);
+            return;
+        }
+        logger.error(
+            `Refund of ${sagaId} failed (${error ?? "no reason given"}); it stays COMPENSATING and is sent again`
+        );
     };
 }

@@ -1,13 +1,21 @@
 import { jest } from "@jest/globals";
-import { SagaStatus, type AccountsSagaState, type Saga, type SagaResponse } from "../src/interfaces/SagaType.js";
+import {
+    ALREADY_CREDITED,
+    SagaStatus,
+    type AccountsSagaState,
+    type Saga,
+    type SagaResponse,
+} from "../src/interfaces/SagaType.js";
 
 type ResponseHandler = (msg: SagaResponse) => Promise<void>;
 
-const mockPublish = jest.fn<(queue: string, message: unknown) => Promise<boolean>>();
+const mockPublish = jest.fn<(queue: string, message: unknown) => Promise<void>>();
 const mockConsume = jest.fn<(queue: string, handler: ResponseHandler) => Promise<void>>();
 const mockCreate = jest.fn<(saga: Saga) => Promise<Saga>>();
 const mockTransition = jest.fn<(sagaId: string, from: SagaStatus[], to: SagaStatus) => Promise<Saga | null>>();
 const mockFindTimedOut = jest.fn<(cutoff: Date) => Promise<Saga[]>>();
+const mockFindStuck = jest.fn<(cutoff: Date) => Promise<Saga[]>>();
+const mockTouch = jest.fn<(sagaId: string, status: SagaStatus) => Promise<Saga | null>>();
 const mockEmit = jest.fn<(userId: string, event: string, data: unknown) => void>();
 const mockAccountsGet = jest.fn<(url: string) => Promise<{ data: AccountsSagaState }>>();
 
@@ -15,7 +23,13 @@ jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
     rabbitMQConfig: { publishMessage: mockPublish, consumeMessages: mockConsume },
 }));
 jest.unstable_mockModule("../src/repository/saga.repository.js", () => ({
-    SagaRepository: { create: mockCreate, transition: mockTransition, findTimedOut: mockFindTimedOut },
+    SagaRepository: {
+        create: mockCreate,
+        transition: mockTransition,
+        findTimedOut: mockFindTimedOut,
+        findStuckCompensating: mockFindStuck,
+        touch: mockTouch,
+    },
 }));
 jest.unstable_mockModule("../src/service/socket.service.js", () => ({
     default: { emitToUser: mockEmit },
@@ -45,20 +59,27 @@ const accountsSays = (state: Partial<AccountsSagaState>) => ({
     data: { debited: false, credited: false, refunded: false, ...state },
 });
 
-const receive = async (type: SagaResponse["type"], success: boolean, sagaId = "saga-1"): Promise<void> => {
+const receive = async (
+    type: SagaResponse["type"],
+    success: boolean,
+    sagaId = "saga-1",
+    error?: string
+): Promise<void> => {
     await SagaService.consumeSagaMessages();
     const handler = mockConsume.mock.calls[0]?.[1];
     if (!handler) throw new Error("consumeSagaMessages did not register a handler");
-    await handler({ type, payload: { sagaId, success } });
+    await handler({ type, payload: error === undefined ? { sagaId, success } : { sagaId, success, error } });
 };
 
 beforeEach(() => {
     SagaService.isProcessing = false;
     mockConsume.mockResolvedValue(undefined);
-    mockPublish.mockResolvedValue(true);
+    mockPublish.mockResolvedValue(undefined);
     mockCreate.mockImplementation(async (saga) => saga);
     mockTransition.mockImplementation(async (sagaId, _from, to) => makeSaga({ sagaId, status: to }));
     mockFindTimedOut.mockResolvedValue([]);
+    mockFindStuck.mockResolvedValue([]);
+    mockTouch.mockImplementation(async (sagaId, status) => makeSaga({ sagaId, status }));
 });
 
 describe("createSaga", () => {
@@ -69,6 +90,15 @@ describe("createSaga", () => {
         expect(saga.sagaId).toMatch(/^[0-9a-f-]{36}$/);
         expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ senderId: SENDER, status: "PENDING" }));
         expect(mockPublish).toHaveBeenCalledWith("debit_queue", { type: "DEBIT_COMMAND", payload: saga });
+    });
+
+    it("still returns the saga when the debit command is not confirmed, so the timeout check can resolve it", async () => {
+        mockPublish.mockRejectedValue(new Error("broker did not confirm"));
+
+        const saga = await SagaService.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
+
+        expect(saga.status).toBe(SagaStatus.PENDING);
+        expect(mockCreate).toHaveBeenCalledTimes(1);
     });
 
     it("refuses to send money to yourself and touches nothing", async () => {
@@ -135,6 +165,20 @@ describe("consuming replies: failures and the refund flow", () => {
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:failed", makeSaga({ status: SagaStatus.FAILED }));
     });
 
+    it("REFUND refused because the receiver was already credited: the transfer is COMPLETED", async () => {
+        await receive("REFUND_RESPONSE", false, "saga-1", ALREADY_CREDITED);
+
+        expect(mockTransition).toHaveBeenCalledWith("saga-1", [SagaStatus.COMPENSATING], SagaStatus.COMPLETED);
+        expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:completed", makeSaga({ status: SagaStatus.COMPLETED }));
+    });
+
+    it("REFUND refused for any other reason: changes nothing", async () => {
+        await receive("REFUND_RESPONSE", false, "saga-1", "ACCOUNT_LOCKED");
+
+        expect(mockTransition).not.toHaveBeenCalled();
+        expect(mockEmit).not.toHaveBeenCalled();
+    });
+
     it("REFUND failed: changes nothing, so the saga stays COMPENSATING", async () => {
         await receive("REFUND_RESPONSE", false);
 
@@ -179,6 +223,11 @@ describe("consuming replies: stale or duplicate messages are ignored", () => {
 
     it("a duplicate CREDIT ok reply does not announce completion twice", async () => {
         await receive("CREDIT_RESPONSE", true);
+        expect(mockEmit).not.toHaveBeenCalled();
+    });
+
+    it("a late already-credited refund answer is ignored", async () => {
+        await receive("REFUND_RESPONSE", false, "saga-1", ALREADY_CREDITED);
         expect(mockEmit).not.toHaveBeenCalled();
     });
 
@@ -292,5 +341,66 @@ describe("handleTimeouts (a service did not reply within 10 seconds)", () => {
         await first;
 
         expect(mockFindTimedOut).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("refunds that were not answered (the saga stays COMPENSATING)", () => {
+    const waiting = (overrides: Partial<Saga> = {}) => makeSaga({ status: SagaStatus.COMPENSATING, ...overrides });
+
+    it("looks for refunds that have had no answer for 10 seconds", async () => {
+        expect(SagaService.REFUND_RETRY_MS).toBe(10_000);
+
+        const before = Date.now();
+        await SagaService.handleTimeouts();
+        const after = Date.now();
+
+        const cutoff = mockFindStuck.mock.calls[0]?.[0];
+        expect(cutoff?.getTime()).toBeGreaterThanOrEqual(before - 10_000);
+        expect(cutoff?.getTime()).toBeLessThanOrEqual(after - 10_000);
+    });
+
+    it("sends the refund again, then refreshes the saga so it is not resent on every check", async () => {
+        mockFindStuck.mockResolvedValue([waiting()]);
+
+        await SagaService.handleTimeouts();
+
+        expect(mockPublish).toHaveBeenCalledWith("refund_queue", { type: "REFUND_COMMAND", payload: waiting() });
+        expect(mockTouch).toHaveBeenCalledWith("saga-1", SagaStatus.COMPENSATING);
+        const publishedAt = mockPublish.mock.invocationCallOrder[0] ?? 0;
+        const touchedAt = mockTouch.mock.invocationCallOrder[0] ?? 0;
+        expect(publishedAt).toBeLessThan(touchedAt);
+    });
+
+    it("leaves the saga untouched when the resend fails, so the next check tries again", async () => {
+        mockFindStuck.mockResolvedValue([waiting()]);
+        mockPublish.mockRejectedValue(new Error("broker down"));
+
+        await SagaService.handleTimeouts();
+
+        expect(mockTouch).not.toHaveBeenCalled();
+    });
+
+    it("keeps going with the other refunds when one resend fails", async () => {
+        mockFindStuck.mockResolvedValue([waiting({ sagaId: "saga-1" }), waiting({ sagaId: "saga-2" })]);
+        mockPublish.mockRejectedValueOnce(new Error("unconfirmed")).mockResolvedValueOnce(undefined);
+
+        await SagaService.handleTimeouts();
+
+        expect(mockTouch).toHaveBeenCalledTimes(1);
+        expect(mockTouch).toHaveBeenCalledWith("saga-2", SagaStatus.COMPENSATING);
+    });
+
+    it("does nothing when no refund is waiting", async () => {
+        await SagaService.handleTimeouts();
+
+        expect(mockPublish).not.toHaveBeenCalled();
+        expect(mockTouch).not.toHaveBeenCalled();
+    });
+
+    it("survives a failure while looking for them and can run again", async () => {
+        mockFindStuck.mockRejectedValueOnce(new Error("mongo is down"));
+
+        await expect(SagaService.handleTimeouts()).resolves.toBeUndefined();
+        expect(SagaService.isProcessing).toBe(false);
     });
 });

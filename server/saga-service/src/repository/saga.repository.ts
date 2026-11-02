@@ -20,6 +20,22 @@ export class SagaRepository {
             .exec() as Promise<Saga[]>;
     };
 
+    static findStuckCompensating = async (cutoff: Date): Promise<Saga[]> => {
+        return sagaModel
+            .find({ status: SagaStatus.COMPENSATING, updatedAt: { $lt: cutoff } })
+            .lean()
+            .select(EXCLUDED_FIELDS)
+            .exec() as Promise<Saga[]>;
+    };
+
+    static touch = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
+        return sagaModel
+            .findOneAndUpdate({ sagaId, status }, { updatedAt: new Date() }, { returnDocument: "after" })
+            .lean()
+            .select(EXCLUDED_FIELDS)
+            .exec() as Promise<Saga | null>;
+    };
+
     static transition = async (sagaId: string, from: SagaStatus[], to: SagaStatus): Promise<Saga | null> => {
         return sagaModel
             .findOneAndUpdate({ sagaId, status: { $in: from } }, { status: to }, { returnDocument: "after" })

@@ -23,6 +23,8 @@ export interface SagaCommand {
     payload: Saga;
 }
 
+export const ALREADY_CREDITED = "ALREADY_CREDITED";
+
 export interface SagaResponse {
     type: "DEBIT_RESPONSE" | "CREDIT_RESPONSE" | "REFUND_RESPONSE";
     payload: {
