@@ -24,6 +24,13 @@ class SocketService {
         });
     };
 
+    public close = async (): Promise<void> => {
+        if (!this.io) return;
+        const io = this.io;
+        this.io = null;
+        await io.close();
+    };
+
     public emitToUser = <T>(userId: string, event: string, data: T): void => {
         if (this.io) {
             this.io.to(userId).emit(event, data);

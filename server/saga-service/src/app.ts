@@ -10,12 +10,14 @@ import socketIo from "./service/socket.service.js";
 import type { Server as HttpServer } from "node:http";
 import { errorHandler } from "./middlewares/errorHandler.js";
 import { NotFound } from "./utils/AppError.js";
+import { rabbitMQConfig } from "./config/rabbitmq.js";
 
 const port = config.PORT;
 
 class Server {
     public app: Application;
     private server!: HttpServer;
+    private timeoutTimer?: NodeJS.Timeout;
 
     constructor() {
         this.app = express();
@@ -69,7 +71,7 @@ class Server {
             });
             socketIo.initSocket(this.server);
             await SagaService.consumeSagaMessages();
-            setInterval(() => void SagaService.handleTimeouts(), 3000).unref();
+            this.timeoutTimer = setInterval(() => void SagaService.handleTimeouts(), 3000).unref();
             this.handleGracefulShutdown();
         } catch (error) {
             logger.error(`Error starting server: ${error}`);
@@ -83,24 +85,25 @@ class Server {
             if (this.isShuttingDown) return;
             this.isShuttingDown = true;
             logger.info(`Received ${signal}. Shutting down gracefully...`);
-            this.server.close(async (err) => {
-                if (err) {
-                    logger.error(`Error closing server: ${err}`);
-                    process.exit(1);
-                }
-                try {
-                    await database.disconnect();
-                    logger.info("Server shut down gracefully");
-                    process.exit(exitCode);
-                } catch (dbError) {
-                    logger.error(`Error during shutdown: ${dbError}`);
-                    process.exit(1);
-                }
-            });
-            setTimeout(() => {
+            const forceExit = setTimeout(() => {
                 logger.error("Could not close connections in time, forcefully shutting down");
                 process.exit(1);
-            }, 10000).unref();
+            }, 10000);
+            forceExit.unref();
+            try {
+                clearInterval(this.timeoutTimer);
+                await socketIo.close();
+                if (this.server.listening) await new Promise<void>((resolve) => this.server.close(() => resolve()));
+                await rabbitMQConfig.close();
+                await database.disconnect();
+                clearTimeout(forceExit);
+                logger.info("Server shut down gracefully");
+                process.exit(exitCode);
+            } catch (error) {
+                clearTimeout(forceExit);
+                logger.error(`Error during shutdown: ${error}`);
+                process.exit(1);
+            }
         };
         process.on("SIGINT", () => void shutdown("SIGINT"));
         process.on("SIGTERM", () => void shutdown("SIGTERM"));
