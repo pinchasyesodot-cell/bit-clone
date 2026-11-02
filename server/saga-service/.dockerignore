@@ -5,3 +5,6 @@ logs
 .env*
 eslint.config.js
 .prettierrc
+test
+jest.config.ts
+tsconfig.json
