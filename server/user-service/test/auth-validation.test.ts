@@ -1,6 +1,6 @@
 import request from "supertest";
 import jwt from "jsonwebtoken";
-import server from "../src/app.js";
+import server from "../src/server.js";
 import { config } from "../src/config/env.js";
 
 const validUser = { userId: 123456789, userName: "dana", password: "Test1234!" };
@@ -9,7 +9,7 @@ const sign = (payload: object, secret: string = config.JWT_SECRET, options: jwt.
     jwt.sign(payload, secret, options);
 
 const getProfile = (authorization?: string) => {
-    const req = request(server.app).get("/api/users/profile");
+    const req = request(server).get("/api/users/profile");
     return authorization === undefined ? req : req.set("Authorization", authorization);
 };
 
@@ -21,13 +21,13 @@ describe("validation messages reach the client", () => {
         ["an unknown field", { ...validUser, isAdmin: true }, /isAdmin/],
         ["a missing userName", { userId: validUser.userId, password: validUser.password }, /userName/],
     ])("POST /api/users with %s answers 400 with the reason", async (_label, body, reason) => {
-        const res = await request(server.app).post("/api/users").send(body);
+        const res = await request(server).post("/api/users").send(body);
         expect(res.status).toBe(400);
         expect(res.body.error).toMatch(reason);
     });
 
     it("POST /api/users/login with an empty body answers 400 with the reason", async () => {
-        const res = await request(server.app).post("/api/users/login").send({});
+        const res = await request(server).post("/api/users/login").send({});
         expect(res.status).toBe(400);
         expect(res.body.error).toMatch(/userName/);
     });

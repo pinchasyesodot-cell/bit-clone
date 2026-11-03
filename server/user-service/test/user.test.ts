@@ -1,6 +1,6 @@
 import request from "supertest";
 import jwt from "jsonwebtoken";
-import server from "../src/app.js";
+import server from "../src/server.js";
 import database from "../src/config/db.js";
 import { userModel } from "../src/models/User.js";
 import { config } from "../src/config/env.js";
@@ -30,26 +30,26 @@ describe("User API Endpoints", () => {
 
     describe("POST /api/users/", () => {
         it("creates a new user and returns 201 status", async () => {
-            const response = await request(server.app).post("/api/users/").send(testUser);
+            const response = await request(server).post("/api/users/").send(testUser);
             expect(response.status).toBe(201);
             expect(response.body).toHaveProperty("userId", testUser.userId);
             expect(response.body).not.toHaveProperty("password");
         });
 
         it("returns 409 status on duplicate userId", async () => {
-            const response = await request(server.app).post("/api/users/").send(testUser);
+            const response = await request(server).post("/api/users/").send(testUser);
             expect(response.status).toBe(409);
         });
 
         it("returns 400 status on empty body", async () => {
-            const response = await request(server.app).post("/api/users/").send({});
+            const response = await request(server).post("/api/users/").send({});
             expect(response.status).toBe(400);
         });
 
         it.each(["userId", "userName", "password"])("returns 400 when %s is missing", async (missingField) => {
             const body: Record<string, unknown> = { ...testUser, userId: 111111111 };
             delete body[missingField];
-            const response = await request(server.app).post("/api/users/").send(body);
+            const response = await request(server).post("/api/users/").send(body);
             expect(response.status).toBe(400);
         });
 
@@ -67,7 +67,7 @@ describe("User API Endpoints", () => {
             ["an array", [1, 2, 3]],
             ["an aboolean", true],
         ])("returns 400 when userId is %s", async (_label, badUserId) => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users")
                 .send({ ...testUser, userId: badUserId });
 
@@ -83,7 +83,7 @@ describe("User API Endpoints", () => {
             ["an array", [1, 2, 3]],
             ["an aboolean", true],
         ])("returns 400 when userName is %s", async (_label, badName) => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users")
                 .send({ ...testUser, userId: 111111111, userName: badName });
             expect(res.status).toBe(400);
@@ -99,21 +99,21 @@ describe("User API Endpoints", () => {
             ["an array", [1, 2, 3]],
             ["an aboolean", true],
         ])("returns 400 when password is %s", async (_label, badPassword) => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users")
                 .send({ ...testUser, userId: 111111111, password: badPassword });
             expect(res.status).toBe(400);
         });
 
         it("returns 400 on an unknown field", async () => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users")
                 .send({ ...testUser, userId: 111111111, isAdmin: true });
             expect(res.status).toBe(400);
         });
 
         it.each([100000000, 999999999])("accepts boundary userId %i", async (id) => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users")
                 .send({ ...testUser, userId: id, userName: `boundary${id}` });
             expect(res.status).toBe(201);
@@ -124,7 +124,7 @@ describe("User API Endpoints", () => {
 
     describe("POST /api/users/login", () => {
         it("returns 200 and a token in the Authorization header", async () => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users/login")
                 .send({ userName: testUser.userName, password: testUser.password });
 
@@ -135,21 +135,21 @@ describe("User API Endpoints", () => {
         });
 
         it("returns 401 on wrong password", async () => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users/login")
                 .send({ userName: testUser.userName, password: "wrong-password" });
             expect(res.status).toBe(401);
         });
 
         it("fails for a user that does not exist", async () => {
-            const res = await request(server.app)
+            const res = await request(server)
                 .post("/api/users/login")
                 .send({ userName: "nobody-here", password: "Test1234!" });
             expect([401, 404]).toContain(res.status);
         });
 
         it("returns 400 on empty body", async () => {
-            const res = await request(server.app).post("/api/users/login").send({});
+            const res = await request(server).post("/api/users/login").send({});
             expect(res.status).toBe(400);
         });
 
@@ -160,7 +160,7 @@ describe("User API Endpoints", () => {
             };
             delete body[field];
 
-            const res = await request(server.app).post("/api/users/login").send(body);
+            const res = await request(server).post("/api/users/login").send(body);
             expect(res.status).toBe(400);
         });
     });
@@ -172,7 +172,7 @@ describe("User API Endpoints", () => {
                 expiresIn: "1h",
             });
 
-            const res = await request(server.app).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
+            const res = await request(server).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
 
             expect(res.status).toBe(200);
             expect(res.body).toHaveProperty("userId", testUser.userId);
@@ -180,14 +180,12 @@ describe("User API Endpoints", () => {
         });
 
         it("returns 401 without a token", async () => {
-            const res = await request(server.app).get("/api/users/profile");
+            const res = await request(server).get("/api/users/profile");
             expect(res.status).toBe(401);
         });
 
         it("returns 401 with an invalid token", async () => {
-            const res = await request(server.app)
-                .get("/api/users/profile")
-                .set("Authorization", "Bearer not-a-real-token");
+            const res = await request(server).get("/api/users/profile").set("Authorization", "Bearer not-a-real-token");
             expect(res.status).toBe(401);
         });
 
@@ -196,7 +194,7 @@ describe("User API Endpoints", () => {
                 expiresIn: -10,
             });
 
-            const res = await request(server.app).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
+            const res = await request(server).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
             expect(res.status).toBe(401);
         });
 
@@ -205,19 +203,19 @@ describe("User API Endpoints", () => {
                 expiresIn: "1h",
             });
 
-            const res = await request(server.app).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
+            const res = await request(server).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
             expect(res.status).toBe(401);
         });
 
         it("returns 404 when the user does not exist", async () => {
             const token = jwt.sign({ userId: 999999998, userName: "ghost" }, config.JWT_SECRET, { expiresIn: "1h" });
 
-            const res = await request(server.app).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
+            const res = await request(server).get("/api/users/profile").set("Authorization", `Bearer ${token}`);
             expect(res.status).toBe(404);
         });
 
         it("returns 404 on an unknown route", async () => {
-            const res = await request(server.app).get("/api/users/does-not-exist");
+            const res = await request(server).get("/api/users/does-not-exist");
             expect(res.status).toBe(404);
             expect(res.body).toHaveProperty("error", "Route not found");
         });
