@@ -33,15 +33,16 @@ class Server {
         );
         this.app.use(express.json({ limit: "10kb" }));
         this.app.use((req: express.Request, _res: express.Response, next: express.NextFunction) => {
-            logger.info(`Incoming request: method: ${req.method}, url: ${req.url}, IP: ${req.ip}`);
+            if (req.path !== "/health") {
+                logger.info(`Incoming request: method: ${req.method}, url: ${req.url}, IP: ${req.ip}`);
+            }
             next();
         });
     };
 
     private initHealthCheck = (): void => {
         this.app.get("/health", (_req, res) => {
-            const isDbConnected = database.isConnected();
-            if (isDbConnected) {
+            if (database.isConnected()) {
                 res.status(200).json({ status: "ok", db: "connected" });
             } else {
                 logger.error("Health check failed: Database is disconnected");
