@@ -55,22 +55,6 @@ class Server {
         this.app.use((_req, _res, next) => next(new NotFound("Route not found")));
         this.app.use(errorHandler);
     };
-
-    //     public start = async (): Promise<void> => {
-    //         try {
-    //             await database.connect();
-    //             this.server = this.app.listen(port, () => {
-    //                 logger.info(`Server is running on port ${port}`);
-    //             });
-    //             registerGracefulShutdown([
-    //                 { name: "HTTP server", run: () => closeServer(this.server) },
-    //                 { name: "Database", run: () => database.disconnect() },
-    //             ]);
-    //         } catch (error) {
-    //             logger.error(`Error starting server: ${error}`);
-    //             process.exit(1);
-    //         }
-    //     };
 }
 
 export default new Server().app;
