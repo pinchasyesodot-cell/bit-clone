@@ -1,4 +1,25 @@
 services:
+  # ==============================
+  # API gateway
+  # ==============================
+  nginx:
+    image: nginx:latest
+    restart: unless-stopped
+    container_name: nginx_server
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - user-service
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  # ==============================
+  # User service
+  # ==============================
   user-db:
     image: mongo:7
     restart: unless-stopped
@@ -14,28 +35,40 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   user-service:
     build:
       context: ./user-service
+    container_name: user-service
     restart: unless-stopped
     env_file:
       - ./user-service/.env
       - ./user-service/.env.docker
-    container_name: user-service
-    volumes:
-      - user-service-logs:/src/app/logs
     depends_on:
       user-db:
         condition: service_healthy
-  nginx:
-    image: nginx:latest
-    container_name: nginx_server
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-    depends_on:
-      - user-service
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   user-db-data:
-  user-service-logs:
