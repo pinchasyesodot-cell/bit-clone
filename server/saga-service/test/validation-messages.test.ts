@@ -7,12 +7,12 @@ jest.unstable_mockModule("../src/utils/logger.js", () => ({
 }));
 
 const { default: request } = await import("supertest");
-const { default: server } = await import("../src/app.js");
+const { default: server } = await import("../src/server.js");
 
 const token = jwt.sign({ userId: 123456789 }, config.JWT_SECRET);
 
 const postSaga = (body: unknown) =>
-    request(server.app)
+    request(server)
         .post("/api/saga")
         .set("Authorization", `Bearer ${token}`)
         .send(body as object);

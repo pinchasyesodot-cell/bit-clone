@@ -23,13 +23,13 @@ jest.unstable_mockModule("../src/utils/logger.js", () => ({
 }));
 
 const { default: request } = await import("supertest");
-const { default: server } = await import("../src/app.js");
+const { default: server } = await import("../src/server.js");
 
 const SENDER_ID = 123456789;
 const token = jwt.sign({ userId: SENDER_ID }, config.JWT_SECRET);
 
 const postSaga = (body: unknown, authorization: string | null = `Bearer ${token}`) => {
-    const req = request(server.app).post("/api/saga");
+    const req = request(server).post("/api/saga");
     return (authorization === null ? req : req.set("Authorization", authorization)).send(body as object);
 };
 
@@ -119,7 +119,7 @@ describe("POST /api/saga", () => {
     });
 
     it("returns a JSON 404 for an unknown route", async () => {
-        const res = await request(server.app).get("/api/saga/does-not-exist");
+        const res = await request(server).get("/api/saga/does-not-exist");
         expect(res.status).toBe(404);
         expect(res.body).toEqual({ error: "Route not found" });
     });
