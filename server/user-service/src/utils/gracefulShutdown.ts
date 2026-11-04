@@ -5,6 +5,10 @@ type ShutdownStep = { name: string; run: () => Promise<void> };
 
 export const closeServer = (server: Server): Promise<void> =>
     new Promise((resolve, reject) => {
+        if (!server.listening) {
+            resolve();
+            return;
+        }
         server.close((error) => (error ? reject(error) : resolve()));
         server.closeIdleConnections();
     });
