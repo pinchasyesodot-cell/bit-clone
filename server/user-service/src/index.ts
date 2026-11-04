@@ -11,7 +11,7 @@ try {
     });
     registerGracefulShutdown([
         { name: "HTTP server", run: () => closeServer(app) },
-        { name: "MongoDB", run: () => database.disconnect() },
+        { name: "Database", run: () => database.disconnect() },
     ]);
 } catch (error) {
     logger.error(`Error starting server: ${error}`);
