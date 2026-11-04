@@ -1,5 +1,23 @@
 services:
   # ==============================
+  # API Gateway / Reverse Proxy
+  # ==============================
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx_server
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - saga-service
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+  # ==============================
   # User Service Ecosystem
   # ==============================
 
@@ -9,8 +27,10 @@ services:
 
   saga-db:
     image: mongo:7
-    restart: always
+    restart: unless-stopped
     container_name: db-saga-orchestrator
+    ports:
+      - "127.0.0.1:27017:27017"
     volumes:
       - saga-db-data:/data/db
     healthcheck:
@@ -20,10 +40,15 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   rabbitmq:
     image: rabbitmq:3-management-alpine
-    restart: always
+    restart: unless-stopped
     container_name: rabbitmq-broker
     ports:
       - "127.0.0.1:5672:5672"
@@ -34,38 +59,44 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     env_file:
       - ./saga-service/.env.docker
 
   saga-service:
     build:
       context: ./saga-service
-    restart: always
+    container_name: saga-service
+    restart: unless-stopped
     env_file:
       - ./saga-service/.env
       - ./saga-service/.env.docker
-    container_name: saga-service
-    volumes:
-      - saga-service-logs:/src/app/logs
     depends_on:
       saga-db:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:' + process.env.PORT + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # ==============================
-  # API Gateway / Reverse Proxy
-  # ==============================
-  
-  nginx:
-    image: nginx:latest
-    container_name: nginx_server
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
-    depends_on:
-      - saga-service
 volumes:
   saga-db-data:
-  saga-service-logs:
