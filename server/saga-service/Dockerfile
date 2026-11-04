@@ -16,14 +16,13 @@ FROM node:22-alpine AS production
 WORKDIR /src/app
 
 ENV NODE_ENV=production
+ENV DOTENV_CONFIG_QUIET=true
 
 COPY package*.json .npmrc ./
 
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=build /src/app/dist ./dist
-
-RUN mkdir -p /src/app/logs && chown -R node:node logs
 
 USER node
 
