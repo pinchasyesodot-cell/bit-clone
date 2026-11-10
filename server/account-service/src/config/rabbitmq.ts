@@ -3,7 +3,7 @@ import { config } from "../config/env.js";
 import type { SagaCommand, SagaResponse } from "../interfaces/saga.type.js";
 import { logger } from "../utils/logger.js";
 
-type ResponseHandler = (msg: SagaResponse) => Promise<void>;
+type CommandHandler = (msg: SagaCommand) => Promise<void>;
 
 class RabbitMQConfig {
     public publishTimeoutMs = 5000;
@@ -12,7 +12,7 @@ class RabbitMQConfig {
     private connection: amqp.ChannelModel | null = null;
     private publishChannel: Promise<amqp.ConfirmChannel> | null = null;
     private consumeChannel: amqp.Channel | null = null;
-    private consumerTag: string | null = null;
+    private consumerTags: string[] = [];
     private publishedQueues = new Set<string>();
     private inFlight = new Set<Promise<void>>();
     private closing = false;
@@ -88,7 +88,7 @@ class RabbitMQConfig {
         });
     };
 
-    public publishMessage = async (queueName: string, message: SagaCommand): Promise<void> => {
+    public publishMessage = async (queueName: string, message: SagaResponse): Promise<void> => {
         const channel = await this.getPublishChannel();
         if (!this.publishedQueues.has(queueName)) {
             await channel.assertQueue(queueName, { durable: true });
@@ -100,14 +100,18 @@ class RabbitMQConfig {
     private handleMessage = async (
         channel: amqp.Channel,
         msg: amqp.ConsumeMessage,
-        callback: ResponseHandler
+        callback: CommandHandler
     ): Promise<void> => {
         try {
-            const response: SagaResponse = JSON.parse(msg.content.toString());
-            await callback(response);
+            const command: SagaCommand = JSON.parse(msg.content.toString());
+            await callback(command);
             channel.ack(msg);
         } catch (error) {
-            logger.error(`Error processing message: ${error}`);
+            logger.error("Failed to process message", {
+                queue: msg.fields.routingKey,
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+            });
             const requeue = !(error instanceof SyntaxError) && !msg.fields.redelivered;
             try {
                 channel.nack(msg, false, requeue);
@@ -117,7 +121,7 @@ class RabbitMQConfig {
         }
     };
 
-    public consumeMessages = async (queueName: string, callback: ResponseHandler): Promise<void> => {
+    public consumeMessages = async (queueName: string, callback: CommandHandler): Promise<void> => {
         const channel = await this.getConsumeChannel();
         await channel.assertQueue(queueName, { durable: true });
         await channel.prefetch(1);
@@ -131,14 +135,16 @@ class RabbitMQConfig {
                 this.inFlight.delete(work);
             }
         });
-        this.consumerTag = consumerTag;
+        this.consumerTags.push(consumerTag);
     };
 
     public close = async (): Promise<void> => {
         this.closing = true;
         try {
-            if (this.consumeChannel && this.consumerTag) {
-                await this.consumeChannel.cancel(this.consumerTag);
+            if (this.consumeChannel) {
+                for (const consumerTag of this.consumerTags) {
+                    await this.consumeChannel.cancel(consumerTag);
+                }
             }
             await Promise.race([
                 Promise.allSettled([...this.inFlight]),
@@ -155,7 +161,7 @@ class RabbitMQConfig {
             this.connection = null;
             this.publishChannel = null;
             this.consumeChannel = null;
-            this.consumerTag = null;
+            this.consumerTags = [];
             this.publishedQueues.clear();
             this.inFlight.clear();
         }
