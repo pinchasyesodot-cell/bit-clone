@@ -50,3 +50,8 @@ export enum AccountError {
     SAGA_CANCELLED = "SAGA_CANCELLED",
     ALREADY_REFUNDED = "ALREADY_REFUNDED",
 }
+
+export interface StepResult {
+    success: boolean;
+    error?: string;
+}
