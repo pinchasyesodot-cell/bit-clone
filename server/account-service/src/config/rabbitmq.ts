@@ -29,6 +29,7 @@ class RabbitMQConfig {
         const connection = await amqp.connect(config.RABBITMQ_URI);
         this.closing = false;
         this.connection = connection;
+        logger.info("Connected to RabbitMQ successfully");
         connection.on("error", (error: unknown) => logger.error(`RabbitMQ connection error: ${error}`));
         connection.on("close", () => this.exitIfUnexpected("connection"));
         return connection;
@@ -136,6 +137,7 @@ class RabbitMQConfig {
             }
         });
         this.consumerTags.push(consumerTag);
+        logger.info("Consuming messages", { queue: queueName });
     };
 
     public close = async (): Promise<void> => {
