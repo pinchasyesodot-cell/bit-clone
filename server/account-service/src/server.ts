@@ -4,9 +4,9 @@ import cors from "cors";
 import { config } from "./config/env.js";
 import { logger } from "./utils/logger.js";
 import database from "./config/db.js";
-// import accountRouter from "./router/saga.router.js";
-// import { errorHandler } from "./middlewares/errorHandler.js";
 import { NotFound } from "./utils/AppError.js";
+import accountRouter from "./routers/account.router.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
 
 class Server {
     public app: Application;
@@ -49,12 +49,12 @@ class Server {
     };
 
     private initRoutes = (): void => {
-        // this.app.use("/api/account", sagaRouter);
+        this.app.use("/api/accounts", accountRouter);
     };
 
     private initErrorHandling = (): void => {
         this.app.use((_req, _res, next) => next(new NotFound("Route not found")));
-        // this.app.use(errorHandler);
+        this.app.use(errorHandler);
     };
 }
 

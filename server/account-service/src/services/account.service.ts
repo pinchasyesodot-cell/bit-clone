@@ -1,7 +1,7 @@
 import type { ClientSession } from "mongoose";
 import { AccountError, AccountStatus, StepStatus, type StepResult } from "../interfaces/account.types.js";
 import { AccountRepository } from "../repository/account.repository.js";
-import { type Saga, ALREADY_CREDITED } from "../interfaces/saga.type.js";
+import { type AccountsSagaState, type Saga, ALREADY_CREDITED } from "../interfaces/saga.type.js";
 import { AccountSagaRepository } from "../repository/accountSaga.repository.js";
 import { withTransaction } from "../utils/transaction.js";
 
@@ -104,5 +104,15 @@ export class AccountService {
             if (!update) throw new Error(`Failed to mark refund as completed for saga ${card.sagaId}`);
             return { success: true };
         });
+    };
+
+    static getSagaState = async (sagaId: string): Promise<AccountsSagaState> => {
+        const card = await AccountSagaRepository.findBySagaId(sagaId);
+        if (!card) return { debited: false, credited: false, refunded: false };
+        return {
+            debited: card.debit === StepStatus.COMPLETED,
+            credited: card.credit === StepStatus.COMPLETED,
+            refunded: card.refund === StepStatus.COMPLETED,
+        };
     };
 }
