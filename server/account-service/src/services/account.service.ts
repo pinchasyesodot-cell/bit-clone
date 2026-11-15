@@ -1,9 +1,16 @@
 import type { ClientSession } from "mongoose";
-import { AccountError, AccountStatus, StepStatus, type StepResult } from "../interfaces/account.types.js";
+import {
+    AccountError,
+    AccountStatus,
+    StepStatus,
+    type AccountDTO,
+    type StepResult,
+} from "../interfaces/account.types.js";
 import { AccountRepository } from "../repository/account.repository.js";
 import { type AccountsSagaState, type Saga, ALREADY_CREDITED } from "../interfaces/saga.type.js";
 import { AccountSagaRepository } from "../repository/accountSaga.repository.js";
 import { withTransaction } from "../utils/transaction.js";
+import { NotFound } from "../utils/AppError.js";
 
 export class AccountService {
     private static getDebitFailureReason = async (userId: string, session: ClientSession): Promise<AccountError> => {
@@ -114,5 +121,17 @@ export class AccountService {
             credited: card.credit === StepStatus.COMPLETED,
             refunded: card.refund === StepStatus.COMPLETED,
         };
+    };
+
+    static getMyAccount = async (userId: string): Promise<AccountDTO> => {
+        const account = await AccountRepository.findByUserId(userId);
+        if (!account) throw new NotFound("Account not found");
+        return account;
+    };
+
+    static setStatus = async (userId: string, status: AccountStatus): Promise<AccountDTO> => {
+        const account = await AccountRepository.setStatus(userId, status);
+        if (!account) throw new NotFound("Account not found");
+        return account;
     };
 }
