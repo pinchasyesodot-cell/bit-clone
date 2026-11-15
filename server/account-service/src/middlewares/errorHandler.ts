@@ -55,12 +55,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
             return;
         }
     }
-    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
-        logger.error("JWT Error:", {
-            message: err.message,
-            stack: err.stack,
-        });
-        res.status(401).json({ error: "Unauthorized: Invalid or expired token" });
+    if (err.name === "TokenExpiredError") {
+        logger.warn("Expired token", { message: err.message });
+        res.status(401).json({ error: "Unauthorized: Token expired" });
+        return;
+    }
+    if (err.name === "JsonWebTokenError") {
+        logger.error("Invalid token", { message: err.message });
+        res.status(401).json({ error: "Unauthorized: Invalid token" });
         return;
     }
     logger.error("Unhandled Error:", {
