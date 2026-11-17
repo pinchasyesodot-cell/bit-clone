@@ -32,7 +32,7 @@ services:
     env_file:
       - ./rabbitmq/.env
     healthcheck:
-      test: rabbitmq-diagnostics -q ping
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -58,7 +58,7 @@ services:
   account-db:
     image: mongo:7
     restart: unless-stopped
-    command: ["--replSet", "rs0", "--bind_ip_all"]
+    command: ["--replSet", "rs0", "--bind_ip_all", "--quiet"]
     container_name: db-account
     ports:
       - "127.0.0.1:27017:27017"
