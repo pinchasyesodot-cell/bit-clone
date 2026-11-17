@@ -17,6 +17,7 @@ export const registerGracefulShutdown = (steps: ShutdownStep[], timeoutMs = 10_0
     let shuttingDown = false;
     const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
         if (shuttingDown) return;
+
         shuttingDown = true;
         logger.info(`Received ${signal}. Shutting down gracefully...`);
         const forceExit = setTimeout(() => {
@@ -24,6 +25,7 @@ export const registerGracefulShutdown = (steps: ShutdownStep[], timeoutMs = 10_0
             process.exit(1);
         }, timeoutMs);
         forceExit.unref();
+
         try {
             for (const step of steps) {
                 await step.run();
