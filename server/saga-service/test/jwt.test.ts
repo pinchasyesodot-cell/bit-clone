@@ -1,7 +1,7 @@
 import request from "supertest";
 import express, { type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
-import { validateToken } from "../src/validations/token.validation.js";
+import { validateToken } from "../src/middlewares/validateToken.js";
 import { errorHandler } from "../src/middlewares/errorHandler.js";
 import { config } from "../src/config/env.js";
 

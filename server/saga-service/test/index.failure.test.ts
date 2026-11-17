@@ -14,8 +14,8 @@ jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
 jest.unstable_mockModule("../src/service/socket.service.js", () => ({
     default: { initSocket: jest.fn(), close: jest.fn(), emitToUser: jest.fn() },
 }));
-jest.unstable_mockModule("../src/service/saga.service.js", () => ({
-    SagaService: { consumeSagaMessages: jest.fn(), handleTimeouts: jest.fn() },
+jest.unstable_mockModule("../src/managers/saga.manager.js", () => ({
+    SagaManager: { consumeSagaMessages: jest.fn(), handleTimeouts: jest.fn() },
 }));
 jest.unstable_mockModule("../src/utils/logger.js", () => ({
     logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
