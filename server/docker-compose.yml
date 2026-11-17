@@ -90,6 +90,8 @@ services:
     restart: unless-stopped
     env_file:
       - ./account-service/.env.docker
+    ports:
+      - "127.0.0.1:4010:4010"
     depends_on:
       account-db:
         condition: service_healthy
