@@ -13,9 +13,9 @@ jest.unstable_mockModule("../src/repository/saga.repository.js", () => ({
     SagaRepository: {
         create: mockCreate,
         transition: jest.fn(),
-        findTimedOut: jest.fn(),
-        findStuckCompensating: jest.fn(),
-        touch: jest.fn(),
+        findTimedOutOpenSagas: jest.fn(),
+        findUnconfirmedRefunds: jest.fn(),
+        refreshUpdatedAt: jest.fn(),
     },
 }));
 jest.unstable_mockModule("../src/utils/logger.js", () => ({

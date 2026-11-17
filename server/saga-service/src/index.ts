@@ -2,7 +2,7 @@ import server from "./server.js";
 import database from "./config/db.js";
 import { config } from "./config/env.js";
 import { rabbitMQConfig } from "./config/rabbitmq.js";
-import { SagaService } from "./service/saga.service.js";
+import { SagaManager } from "./managers/saga.manager.js";
 import socketIo from "./service/socket.service.js";
 import { closeServer, registerGracefulShutdown } from "./utils/gracefulShutdown.js";
 import { logger } from "./utils/logger.js";
@@ -13,8 +13,8 @@ try {
         logger.info(`Server is running on port ${config.PORT}`);
     });
     socketIo.initSocket(app);
-    await SagaService.consumeSagaMessages();
-    const timeoutCheck = setInterval(() => void SagaService.handleTimeouts(), 3000);
+    await SagaManager.consumeSagaMessages();
+    const timeoutCheck = setInterval(() => void SagaManager.handleTimeouts(), 3000);
     timeoutCheck.unref();
 
     registerGracefulShutdown([

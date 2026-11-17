@@ -10,10 +10,10 @@ import { SagaRepository } from "../repository/saga.repository.js";
 import { rabbitMQConfig } from "../config/rabbitmq.js";
 import { api } from "../api/base.api.js";
 import { logger } from "../utils/logger.js";
-import socketIo from "./socket.service.js";
+import socketIo from "../service/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 
-export class SagaService {
+export class SagaManager {
     static isProcessing = false;
     static SAGA_TIMEOUT_MS = 10000;
     static REFUND_RETRY_MS = 10000;
@@ -22,9 +22,11 @@ export class SagaService {
         if (saga.senderId === saga.receiverId) {
             throw new AppError("Cannot send money to yourself", 400);
         }
+
         const sagaId = uuidv4();
         const status = SagaStatus.PENDING;
         const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
+
         try {
             await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
         } catch (error) {
@@ -32,15 +34,18 @@ export class SagaService {
                 `Debit command of saga ${sagaId} was not confirmed, the timeout check will resolve it: ${error}`
             );
         }
+
         return newSaga;
     };
 
     static handleTimeouts = async (): Promise<void> => {
         if (this.isProcessing) return;
+
         this.isProcessing = true;
         try {
             const cutoff = new Date(Date.now() - this.SAGA_TIMEOUT_MS);
-            const timedOutSagas = await SagaRepository.findTimedOut(cutoff);
+            const timedOutSagas = await SagaRepository.findTimedOutOpenSagas(cutoff);
+
             for (const saga of timedOutSagas) {
                 try {
                     await this.reconcile(saga);
@@ -48,6 +53,7 @@ export class SagaService {
                     logger.error(`Timeout handling failed for saga ${saga.sagaId}: ${error}`);
                 }
             }
+
             await this.resendUnconfirmedRefunds();
         } catch (error) {
             logger.error(`General error in handleTimeouts: ${error}`);
@@ -58,33 +64,45 @@ export class SagaService {
 
     private static resendUnconfirmedRefunds = async (): Promise<void> => {
         const cutoff = new Date(Date.now() - this.REFUND_RETRY_MS);
-        const waiting = await SagaRepository.findStuckCompensating(cutoff);
+        const waiting = await SagaRepository.findUnconfirmedRefunds(cutoff);
+
         for (const saga of waiting) {
             try {
                 logger.warn(`No answer to the refund of saga ${saga.sagaId}, sending it again`);
                 await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: saga });
-                await SagaRepository.touch(saga.sagaId, SagaStatus.COMPENSATING);
+                await SagaRepository.refreshUpdatedAt(saga.sagaId, SagaStatus.COMPENSATING);
             } catch (error) {
                 logger.error(`Failed to resend refund command for saga ${saga.sagaId}: ${error}`);
             }
         }
     };
 
+    private static resolveTimeOutStatus = (state: AccountsSagaState): SagaStatus => {
+        if (state.credited) return SagaStatus.COMPLETED;
+        if (state.refunded) return SagaStatus.FAILED;
+        return SagaStatus.COMPENSATING;
+    };
+
     private static reconcile = async (saga: Saga): Promise<void> => {
         const { data } = await api.get<AccountsSagaState>(`/${saga.sagaId}`);
         const open = [SagaStatus.PENDING, SagaStatus.PROCESSING];
-        if (data.credited) {
-            const done = await SagaRepository.transition(saga.sagaId, open, SagaStatus.COMPLETED);
-            if (done) socketIo.emitToUser(done.senderId, "saga:completed", done);
-        } else if (data.refunded) {
-            const failed = await SagaRepository.transition(saga.sagaId, open, SagaStatus.FAILED);
-            if (failed) socketIo.emitToUser(failed.senderId, "saga:failed", failed);
-        } else {
-            const updated = await SagaRepository.transition(saga.sagaId, open, SagaStatus.COMPENSATING);
-            if (updated) {
-                await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: updated });
-                socketIo.emitToUser(saga.senderId, "saga:compensating", updated);
-            }
+        const nextStatus = this.resolveTimeOutStatus(data);
+
+        const update = await SagaRepository.transition(saga.sagaId, open, nextStatus);
+        if (!update) return;
+
+        switch (nextStatus) {
+            case SagaStatus.COMPLETED:
+                socketIo.emitToUser(update.senderId, "saga:completed", update);
+                break;
+
+            case SagaStatus.FAILED:
+                socketIo.emitToUser(update.senderId, "saga:failed", update);
+                break;
+
+            case SagaStatus.COMPENSATING:
+                await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: update });
+                socketIo.emitToUser(update.senderId, "saga:compensating", update);
         }
     };
 
@@ -92,16 +110,20 @@ export class SagaService {
         await rabbitMQConfig.consumeMessages("saga_response_queue", async (msg) => {
             const { type, payload } = msg;
             const { sagaId, success, error } = payload;
+
             switch (type) {
                 case "DEBIT_RESPONSE":
                     await this.handleDebitResponse(sagaId, success);
                     break;
+
                 case "CREDIT_RESPONSE":
                     await this.handleCreditResponse(sagaId, success);
                     break;
+
                 case "REFUND_RESPONSE":
                     await this.handleRefundResponse(sagaId, success, error);
                     break;
+
                 default:
                     logger.warn(`Unknown message type: ${type}`);
             }
@@ -115,14 +137,17 @@ export class SagaService {
                 logger.warn(`Ignoring stale DEBIT_RESPONSE (failure) for ${sagaId}`);
                 return;
             }
+
             socketIo.emitToUser(saga.senderId, "saga:failed", saga);
             return;
         }
+
         const saga = await SagaRepository.transition(sagaId, [SagaStatus.PENDING], SagaStatus.PROCESSING);
         if (!saga) {
             logger.warn(`Ignoring stale DEBIT_RESPONSE for ${sagaId}`);
             return;
         }
+
         await rabbitMQConfig.publishMessage("credit_queue", { type: "CREDIT_COMMAND", payload: saga });
         socketIo.emitToUser(saga.senderId, "saga:processing", saga);
     };
@@ -134,22 +159,27 @@ export class SagaService {
                 logger.warn(`Ignoring stale CREDIT_RESPONSE for ${sagaId}`);
                 return;
             }
+
             await rabbitMQConfig.publishMessage("refund_queue", {
                 type: "REFUND_COMMAND",
                 payload: saga,
             });
+
             socketIo.emitToUser(saga.senderId, "saga:compensating", saga);
             return;
         }
+
         const saga = await SagaRepository.transition(
             sagaId,
             [SagaStatus.PROCESSING, SagaStatus.COMPENSATING],
             SagaStatus.COMPLETED
         );
+
         if (!saga) {
             logger.warn(`Ignoring stale CREDIT_RESPONSE for ${sagaId}`);
             return;
         }
+
         socketIo.emitToUser(saga.senderId, "saga:completed", saga);
     };
 
@@ -160,18 +190,23 @@ export class SagaService {
                 logger.warn(`Ignoring stale Refund_RESPONSE for ${sagaId}`);
                 return;
             }
+
             socketIo.emitToUser(saga.senderId, "saga:failed", saga);
             return;
         }
+
         if (error === ALREADY_CREDITED) {
             const saga = await SagaRepository.transition(sagaId, [SagaStatus.COMPENSATING], SagaStatus.COMPLETED);
+
             if (!saga) {
                 logger.warn(`Ignoring stale Refund_RESPONSE for ${sagaId}`);
                 return;
             }
+
             socketIo.emitToUser(saga.senderId, "saga:completed", saga);
             return;
         }
+
         logger.error(
             `Refund of ${sagaId} failed (${error ?? "no reason given"}); it stays COMPENSATING and is sent again`
         );

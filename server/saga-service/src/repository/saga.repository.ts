@@ -9,7 +9,7 @@ export class SagaRepository {
         return (await doc.save()).toJSON() as Saga;
     };
 
-    static findTimedOut = async (cutoff: Date): Promise<Saga[]> => {
+    static findTimedOutOpenSagas = async (cutoff: Date): Promise<Saga[]> => {
         return sagaModel
             .find({
                 status: { $in: [SagaStatus.PENDING, SagaStatus.PROCESSING] },
@@ -20,7 +20,7 @@ export class SagaRepository {
             .exec() as Promise<Saga[]>;
     };
 
-    static findStuckCompensating = async (cutoff: Date): Promise<Saga[]> => {
+    static findUnconfirmedRefunds = async (cutoff: Date): Promise<Saga[]> => {
         return sagaModel
             .find({ status: SagaStatus.COMPENSATING, updatedAt: { $lt: cutoff } })
             .lean()
@@ -28,7 +28,7 @@ export class SagaRepository {
             .exec() as Promise<Saga[]>;
     };
 
-    static touch = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
+    static refreshUpdatedAt = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
         return sagaModel
             .findOneAndUpdate({ sagaId, status }, { updatedAt: new Date() }, { returnDocument: "after" })
             .lean()

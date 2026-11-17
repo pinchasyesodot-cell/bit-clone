@@ -89,7 +89,7 @@ describe("SagaRepository.transition", () => {
     });
 });
 
-describe("SagaRepository.findTimedOut", () => {
+describe("SagaRepository.findTimedOutOpenSagas", () => {
     it("returns only sagas that are still open and have not moved for longer than the cutoff", async () => {
         await SagaRepository.create(makeSaga({ sagaId: "old-pending", status: SagaStatus.PENDING }));
         await SagaRepository.create(makeSaga({ sagaId: "old-processing", status: SagaStatus.PROCESSING }));
@@ -100,13 +100,13 @@ describe("SagaRepository.findTimedOut", () => {
             await ageSaga(sagaId, 60);
         }
 
-        const found = await SagaRepository.findTimedOut(new Date(Date.now() - 10_000));
+        const found = await SagaRepository.findTimedOutOpenSagas(new Date(Date.now() - 10_000));
 
         expect(found.map((saga) => saga.sagaId).sort()).toEqual(["old-pending", "old-processing"]);
     });
 });
 
-describe("SagaRepository.findStuckCompensating", () => {
+describe("SagaRepository.findUnconfirmedRefunds", () => {
     it("returns only COMPENSATING sagas that have not moved for longer than the cutoff", async () => {
         await SagaRepository.create(makeSaga({ sagaId: "old-compensating", status: SagaStatus.COMPENSATING }));
         await SagaRepository.create(makeSaga({ sagaId: "fresh-compensating", status: SagaStatus.COMPENSATING }));
@@ -116,32 +116,32 @@ describe("SagaRepository.findStuckCompensating", () => {
             await ageSaga(sagaId, 60);
         }
 
-        const found = await SagaRepository.findStuckCompensating(new Date(Date.now() - 10_000));
+        const found = await SagaRepository.findUnconfirmedRefunds(new Date(Date.now() - 10_000));
 
         expect(found.map((saga) => saga.sagaId)).toEqual(["old-compensating"]);
     });
 });
 
-describe("SagaRepository.touch", () => {
+describe("SagaRepository.refreshUpdatedAt", () => {
     it("refreshes updatedAt without changing the status", async () => {
         await SagaRepository.create(makeSaga({ status: SagaStatus.COMPENSATING }));
         await ageSaga("saga-1", 60);
         const cutoff = new Date(Date.now() - 10_000);
-        expect(await SagaRepository.findStuckCompensating(cutoff)).toHaveLength(1);
+        expect(await SagaRepository.findUnconfirmedRefunds(cutoff)).toHaveLength(1);
 
-        const touched = await SagaRepository.touch("saga-1", SagaStatus.COMPENSATING);
+        const refreshed = await SagaRepository.refreshUpdatedAt("saga-1", SagaStatus.COMPENSATING);
 
-        expect(touched?.status).toBe(SagaStatus.COMPENSATING);
-        expect(await SagaRepository.findStuckCompensating(cutoff)).toHaveLength(0);
+        expect(refreshed?.status).toBe(SagaStatus.COMPENSATING);
+        expect(await SagaRepository.findUnconfirmedRefunds(cutoff)).toHaveLength(0);
     });
 
     it("returns null and changes nothing when the saga is in a different status", async () => {
         await SagaRepository.create(makeSaga({ status: SagaStatus.COMPLETED }));
         await ageSaga("saga-1", 60);
 
-        const touched = await SagaRepository.touch("saga-1", SagaStatus.COMPENSATING);
+        const refreshed = await SagaRepository.refreshUpdatedAt("saga-1", SagaStatus.COMPENSATING);
 
-        expect(touched).toBeNull();
+        expect(refreshed).toBeNull();
         const stored = await sagaModel.collection.findOne({ sagaId: "saga-1" });
         expect(Date.now() - new Date(stored?.updatedAt).getTime()).toBeGreaterThan(30_000);
     });
