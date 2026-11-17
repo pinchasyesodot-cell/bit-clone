@@ -2,7 +2,7 @@ import { Router } from "express";
 import { SagaController } from "../controller/saga.controller.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { sagaValidationSchema } from "../validations/saga.validation.js";
-import { validateToken } from "../validations/token.validation.js";
+import { validateToken } from "../middlewares/validateToken.js";
 
 class SagaRouter {
     public router: Router;

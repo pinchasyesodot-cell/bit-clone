@@ -7,14 +7,13 @@ import { AppError } from "../utils/AppError.js";
 export const validateToken = (req: Request, _res: Response, next: NextFunction) => {
     const [scheme, token] = req.get("Authorization")?.split(" ") ?? [];
     if (scheme !== "Bearer" || !token) {
-        logger.error("Access denied. Invalid token format.");
+        logger.warn("Access denied. Invalid token format.");
         return next(new AppError("Invalid token.", 401));
     }
     try {
-        const payload = JWT.verifyToken(token, config.JWT_SECRET);
-        const userId = typeof payload === "string" ? NaN : Number(payload.userId);
-        if (!Number.isInteger(userId)) {
-            logger.error("Invalid token payload: userId is not a valid integer.");
+        const userId = JWT.getUserId(token, config.JWT_SECRET);
+        if (userId === null) {
+            logger.warn("Invalid token payload: userId is not a valid integer.");
             return next(new AppError("Invalid token", 401));
         }
         req.user = { userId };

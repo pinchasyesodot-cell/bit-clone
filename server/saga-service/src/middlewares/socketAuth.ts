@@ -10,9 +10,8 @@ export const socketAuth = (socket: Socket, next: (err?: ExtendedError) => void):
         const token = socket.handshake.auth.token as string | undefined;
         if (!token) return next(new Error("Unauthorized"));
 
-        const payload = JWT.verifyToken(token, config.JWT_SECRET);
-        const userId = typeof payload === "string" ? NaN : Number(payload.userId);
-        if (!Number.isInteger(userId)) return next(new Error("Unauthorized"));
+        const userId = JWT.getUserId(token, config.JWT_SECRET);
+        if (userId === null) return next(new Error("Unauthorized"));
 
         socket.data.userId = String(userId);
         next();
