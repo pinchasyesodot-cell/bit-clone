@@ -59,16 +59,4 @@ export class AccountRepository {
         const createdAccount = new AccountModel(account);
         return (await createdAccount.save({ session: session ?? null })).toJSON() as AccountDTO;
     };
-
-    static setStatus = async (
-        userId: string,
-        status: AccountStatus,
-        session?: ClientSession
-    ): Promise<AccountDTO | null> => {
-        return await AccountModel.findOneAndUpdate({ userId }, { $set: { status } }, { returnDocument: "after" })
-            .session(session ?? null)
-            .select(EXCLUDED_FIELDS)
-            .lean()
-            .exec();
-    };
 }

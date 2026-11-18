@@ -128,10 +128,4 @@ export class AccountService {
         if (!account) throw new NotFound("Account not found");
         return account;
     };
-
-    static setStatus = async (userId: string, status: AccountStatus): Promise<AccountDTO> => {
-        const account = await AccountRepository.setStatus(userId, status);
-        if (!account) throw new NotFound("Account not found");
-        return account;
-    };
 }

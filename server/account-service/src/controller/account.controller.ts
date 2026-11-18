@@ -15,9 +15,4 @@ export class AccountController {
         const account = await AccountService.getMyAccount(String(req.user.userId));
         res.status(200).json(account);
     });
-
-    static setStatus = wrapAsync(async (req: Request, res: Response): Promise<void> => {
-        const account = await AccountService.setStatus(String(req.params.userId), req.body.status);
-        res.status(200).json(account);
-    });
 }
