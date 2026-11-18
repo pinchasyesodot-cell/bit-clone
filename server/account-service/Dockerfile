@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /src/app
 
@@ -11,7 +11,7 @@ COPY . .
 RUN npm run build
 
 
-FROM node:22-alpine AS production
+FROM node:26-alpine AS production
 
 WORKDIR /src/app
 
@@ -28,4 +28,4 @@ USER node
 
 EXPOSE 4010
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--enable-source-maps", "dist/index.js"]
