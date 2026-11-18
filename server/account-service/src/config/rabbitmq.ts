@@ -1,9 +1,10 @@
 import amqp from "amqplib";
 import { config } from "../config/env.js";
-import type { SagaCommand, SagaResponse } from "../interfaces/saga.type.js";
+import type { SagaResponse } from "../interfaces/saga.type.js";
 import { logger } from "../utils/logger.js";
+import { InvalidMessageError } from "../utils/InvalidMessageError.js";
 
-type CommandHandler = (msg: SagaCommand) => Promise<void>;
+type CommandHandler = (msg: unknown) => Promise<void>;
 
 class RabbitMQConfig {
     public publishTimeoutMs = 5000;
@@ -104,7 +105,7 @@ class RabbitMQConfig {
         callback: CommandHandler
     ): Promise<void> => {
         try {
-            const command: SagaCommand = JSON.parse(msg.content.toString());
+            const command: unknown = JSON.parse(msg.content.toString());
             await callback(command);
             channel.ack(msg);
         } catch (error) {
@@ -113,7 +114,8 @@ class RabbitMQConfig {
                 error: error instanceof Error ? error.message : String(error),
                 stack: error instanceof Error ? error.stack : undefined,
             });
-            const requeue = !(error instanceof SyntaxError) && !msg.fields.redelivered;
+            const permanent = error instanceof SyntaxError || error instanceof InvalidMessageError;
+            const requeue = !permanent && !msg.fields.redelivered;
             try {
                 channel.nack(msg, false, requeue);
             } catch (nackError) {

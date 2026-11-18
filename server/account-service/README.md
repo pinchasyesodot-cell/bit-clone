@@ -11,13 +11,13 @@ There is no API for changing an account's status. To test the refund flow, freez
 PowerShell:
 
 ```powershell
-docker exec db-account mongosh bit-clone-account --quiet --eval "db.accounts.updateOne({ userId: '2' }, { `$set: { status: 'FROZEN' } })"
+docker exec db-account mongosh bit-clone-account --quiet --eval "db.accounts.updateOne({ userId: '123456789' }, { `$set: { status: 'FROZEN' } })"
 ```
 
 Bash:
 
 ```bash
-docker exec db-account mongosh bit-clone-account --quiet --eval "db.accounts.updateOne({ userId: '2' }, { \$set: { status: 'FROZEN' } })"
+docker exec db-account mongosh bit-clone-account --quiet --eval "db.accounts.updateOne({ userId: '123456789' }, { \$set: { status: 'FROZEN' } })"
 ```
 
 To unfreeze it, run the same command with `status: 'ACTIVE'`.
