@@ -2,10 +2,10 @@
   "name": "account-service",
   "version": "1.0.0",
   "description": "",
-  "main": "src/index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "tsx watch src/index.js",
+    "start": "node --enable-source-maps dist/index.js",
+    "dev": "tsx watch src/index.ts",
     "build": "tsc -p ./tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
