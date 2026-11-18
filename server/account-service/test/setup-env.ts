@@ -4,3 +4,4 @@ process.env.MONGO_URI = "mongodb://localhost:27017/account-test";
 process.env.RABBITMQ_URI = "amqp://localhost";
 process.env.JWT_SECRET = "test-secret";
 process.env.URL_CLIENT = "http://localhost:3000";
+process.env.INTERNAL_API_KEY = "0123456789abcdefghejkqwertyuiopv";

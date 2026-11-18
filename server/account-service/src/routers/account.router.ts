@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AccountController } from "../controller/account.controller.js";
 import { validateToken } from "../middlewares/validateToken.js";
+import { requireInternalKey } from "../middlewares/requireInternalKey.js";
 
 class AccountRouter {
     public router: Router;
@@ -11,7 +12,7 @@ class AccountRouter {
     }
 
     private initializeRoutes(): void {
-        this.router.get("/sagas/:sagaId", AccountController.getSagaState);
+        this.router.get("/sagas/:sagaId", requireInternalKey, AccountController.getSagaState);
         this.router.get("/me", validateToken, AccountController.getMyAccount);
     }
 }
