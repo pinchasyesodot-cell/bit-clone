@@ -23,7 +23,8 @@ services:
   # ==============================
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
+    image: rabbitmq:4.4-management-alpine
+    hostname: rabbitmq
     restart: unless-stopped
     container_name: rabbitmq-broker
     ports:
@@ -37,6 +38,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
     logging:
       driver: "json-file"
       options:
@@ -117,3 +120,4 @@ services:
 
 volumes:
   account-db-data:
+  rabbitmq-data:
