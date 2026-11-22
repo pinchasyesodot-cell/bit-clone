@@ -73,13 +73,14 @@ class RabbitMQConfig {
     private sendAndWaitForConfirm = async (
         channel: amqp.ConfirmChannel,
         queueName: string,
-        content: Buffer
+        content: Buffer,
+        options: amqp.Options.Publish = {}
     ): Promise<void> => {
         return new Promise<void>((resolve, reject) => {
             const timer = setTimeout(() => {
                 reject(new Error(`RabbitMQ did not confirm the message to ${queueName} in time.`));
             }, this.publishTimeoutMs);
-            channel.sendToQueue(queueName, content, { persistent: true }, (error: unknown) => {
+            channel.sendToQueue(queueName, content, { ...options, persistent: true }, (error: unknown) => {
                 clearTimeout(timer);
                 if (error) {
                     reject(error instanceof Error ? error : new Error(String(error)));
@@ -90,13 +91,37 @@ class RabbitMQConfig {
         });
     };
 
+    private ensureQueue = async (channel: amqp.ConfirmChannel, queueName: string): Promise<void> => {
+        if (this.publishedQueues.has(queueName)) return;
+        await channel.assertQueue(queueName, { durable: true });
+        this.publishedQueues.add(queueName);
+    };
+
     public publishMessage = async (queueName: string, message: SagaResponse): Promise<void> => {
         const channel = await this.getPublishChannel();
-        if (!this.publishedQueues.has(queueName)) {
-            await channel.assertQueue(queueName, { durable: true });
-            this.publishedQueues.add(queueName);
-        }
+        await this.ensureQueue(channel, queueName);
         await this.sendAndWaitForConfirm(channel, queueName, Buffer.from(JSON.stringify(message)));
+    };
+
+    private deadLetter = async (msg: amqp.ConsumeMessage, reason: string): Promise<void> => {
+        const originalQueue = msg.fields.routingKey;
+        const deadQueue = `${originalQueue}.dead`;
+        const channel = await this.getPublishChannel();
+        await this.ensureQueue(channel, deadQueue);
+        await this.sendAndWaitForConfirm(channel, deadQueue, msg.content, {
+            headers: { "x-error": reason, "x-original-queue": originalQueue },
+        });
+    };
+
+    private safeNack = (channel: amqp.Channel, msg: amqp.ConsumeMessage, requeue: boolean): void => {
+        try {
+            channel.nack(msg, false, requeue);
+        } catch (error) {
+            logger.error("Failed to nack message", {
+                queue: msg.fields.routingKey,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
     };
 
     private handleMessage = async (
@@ -109,17 +134,28 @@ class RabbitMQConfig {
             await callback(command);
             channel.ack(msg);
         } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
             logger.error("Failed to process message", {
                 queue: msg.fields.routingKey,
-                error: error instanceof Error ? error.message : String(error),
+                error: reason,
                 stack: error instanceof Error ? error.stack : undefined,
             });
+
             const permanent = error instanceof SyntaxError || error instanceof InvalidMessageError;
-            const requeue = !permanent && !msg.fields.redelivered;
+            if (!permanent && !msg.fields.redelivered) {
+                this.safeNack(channel, msg, true);
+                return;
+            }
+
             try {
-                channel.nack(msg, false, requeue);
-            } catch (nackError) {
-                logger.error(`Error sending nack for message: ${nackError}`);
+                await this.deadLetter(msg, reason);
+                channel.ack(msg);
+            } catch (deadLetterError) {
+                logger.error("Filed to dead-letter message", {
+                    queue: msg.fields.routingKey,
+                    error: deadLetterError instanceof Error ? deadLetterError.message : String(deadLetterError),
+                });
+                this.safeNack(channel, msg, false);
             }
         }
     };
