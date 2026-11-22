@@ -68,20 +68,29 @@ export class AccountService {
             if (!card) {
                 throw new Error(`AccountSaga card not found for saga ${saga.sagaId}`);
             }
+
             if (card.credit === StepStatus.COMPLETED) return { success: true };
             if (card.credit === StepStatus.FAILED) {
                 return { success: false, ...(card.creditError && { error: card.creditError }) };
             }
+
             if (card.refund === StepStatus.COMPLETED) {
                 await AccountSagaRepository.rejectCredit(card.sagaId, AccountError.ALREADY_REFUNDED, session);
                 return { success: false, error: AccountError.ALREADY_REFUNDED };
             }
+
+            if (card.debit !== StepStatus.COMPLETED) {
+                await AccountSagaRepository.rejectCredit(card.sagaId, AccountError.DEBIT_NOT_COMPLETED, session);
+                return { success: false, error: AccountError.DEBIT_NOT_COMPLETED };
+            }
+
             const account = await AccountRepository.credit(saga.receiverId, card.amount, session);
             if (!account) {
                 const reason = await this.getCreditFailureReason(saga.receiverId, session);
                 await AccountSagaRepository.rejectCredit(card.sagaId, reason, session);
                 return { success: false, error: reason };
             }
+
             const update = await AccountSagaRepository.completeCredit(card.sagaId, session);
             if (!update) throw new Error(`Failed to mark credit as completed for saga ${card.sagaId}`);
             return { success: true };

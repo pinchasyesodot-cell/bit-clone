@@ -175,11 +175,23 @@ describe("handleCredit", () => {
         expect(await balanceOf(RECEIVER)).toBe(0);
     });
 
-    it("never credits money that was never debited, and rolls the credit back", async () => {
-        await expect(AccountService.handleCredit(makeSaga())).rejects.toThrow();
+    it("rejects a credit when the debit has not completed, and moves no money", async () => {
+        const result = await AccountService.handleCredit(makeSaga());
 
+        expect(result).toEqual({ success: false, error: AccountError.DEBIT_NOT_COMPLETED });
         expect(await balanceOf(RECEIVER)).toBe(0);
-        expect((await cardOf())?.credit).toBe(StepStatus.PENDING);
+        const card = await cardOf();
+        expect(card?.credit).toBe(StepStatus.FAILED);
+        expect(card?.creditError).toBe(AccountError.DEBIT_NOT_COMPLETED);
+    });
+
+    it("rejects a credit when the debit failed", async () => {
+        await AccountService.handleDebit(makeSaga({ amount: OPENING_BALANCE + 1 }));
+
+        const result = await AccountService.handleCredit(makeSaga({ amount: OPENING_BALANCE + 1 }));
+
+        expect(result).toEqual({ success: false, error: AccountError.DEBIT_NOT_COMPLETED });
+        expect(await balanceOf(RECEIVER)).toBe(0);
     });
 });
 
