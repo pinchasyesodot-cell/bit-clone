@@ -2,6 +2,7 @@ import Joi from "joi";
 import { AppError } from "../utils/AppError.js";
 import { logger } from "../utils/logger.js";
 import type { ErrorRequestHandler } from "express";
+import { isDuplicateKey } from "../utils/mongoErrors.js";
 
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void => {
     if (err instanceof Joi.ValidationError) {
@@ -11,7 +12,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
         res.status(400).json({ error: err.details.map((detail) => detail.message).join(", ") });
         return;
     }
-    if (err.name === "MongoServerError" && err.code === 11000) {
+    if (isDuplicateKey(err)) {
         logger.error("MongoDB Duplicate Key Error:", {
             message: err.message,
             stack: err.stack,

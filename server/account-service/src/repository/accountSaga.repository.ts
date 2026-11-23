@@ -1,9 +1,9 @@
 import { type Saga } from "../interfaces/saga.type.js";
 import { AccountSagaModel } from "../models/accountSaga.model.js";
-import { mongo } from "mongoose";
 import { logger } from "../utils/logger.js";
 import type { ClientSession } from "mongoose";
 import { AccountError, StepStatus, type AccountSagaDTO } from "../interfaces/account.types.js";
+import { isDuplicateKey } from "../utils/mongoErrors.js";
 
 const EXCLUDED_FIELDS = "-_id -__v -updatedAt -createdAt";
 
@@ -21,7 +21,7 @@ export class AccountSagaRepository {
                 { runValidators: true, upsert: true }
             ).exec();
         } catch (error: unknown) {
-            if (error instanceof mongo.MongoServerError && error.code === 11000) {
+            if (isDuplicateKey(error, "sagaId")) {
                 logger.debug("MongoDB Duplicate Key Error:", {
                     message: error.message,
                 });
