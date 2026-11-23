@@ -6,6 +6,7 @@ import { AccountService } from "../services/account.service.js";
 import { logger } from "../utils/logger.js";
 import { commandSchema } from "../validations/sagaCommand.validation.js";
 import { InvalidMessageError } from "../utils/InvalidMessageError.js";
+import { userCreatedSchema } from "../validations/userEvent.validation.js";
 
 const SAGA_RESPONSE_QUEUE = "saga_response_queue";
 const debitSchema = commandSchema("DEBIT_COMMAND");
@@ -29,6 +30,14 @@ const processCommand = async (
     });
 };
 
+const handleUserCreated = async (message: unknown): Promise<void> => {
+    const { error, value: event } = userCreatedSchema.validate(message, { abortEarly: false });
+    if (error) throw new InvalidMessageError(error.message);
+
+    const opened = await AccountService.openAccount(event.payload.userId);
+    logger.info(opened ? "Account opened" : "Account already exists");
+};
+
 export const startConsumers = async (): Promise<void> => {
     await rabbitMQConfig.consumeMessages("debit_queue", (cmd) =>
         processCommand(cmd, debitSchema, AccountService.handleDebit, "DEBIT_RESPONSE")
@@ -39,4 +48,5 @@ export const startConsumers = async (): Promise<void> => {
     await rabbitMQConfig.consumeMessages("refund_queue", (cmd) =>
         processCommand(cmd, refundSchema, AccountService.handleRefund, "REFUND_RESPONSE")
     );
+    await rabbitMQConfig.consumeMessages("user_created_queue", handleUserCreated);
 };
