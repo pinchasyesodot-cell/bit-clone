@@ -36,7 +36,7 @@ services:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
       start_period: 20s
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
@@ -95,6 +95,7 @@ services:
       - ./account-service/.env.docker
     ports:
       - "127.0.0.1:4010:4010"
+    stop_grace_period: 15s
     depends_on:
       account-db:
         condition: service_healthy
