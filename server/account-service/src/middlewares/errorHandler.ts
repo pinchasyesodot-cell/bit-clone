@@ -8,34 +8,31 @@ import jwt from "jsonwebtoken";
 
 export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next): void => {
     if (err instanceof Joi.ValidationError) {
-        logger.error("Joi Validation Error:", {
-            details: err.details,
+        logger.warn("Joi Validation Error", {
+            message: err.message,
         });
         res.status(400).json({ error: err.details.map((detail) => detail.message).join(", ") });
         return;
     }
     if (isDuplicateKey(err)) {
-        logger.error("MongoDB Duplicate Key Error", {
+        logger.warn("MongoDB Duplicate Key Error", {
             message: err.message,
-            stack: err.stack,
         });
         res.status(409).json({ error: "Conflict: Duplicate value entered" });
         return;
     }
 
     if (err instanceof mongoose.Error.ValidationError) {
-        logger.error("MongoDB Validation Error", {
+        logger.warn("MongoDB Validation Error", {
             message: err.message,
-            stack: err.stack,
         });
         res.status(400).json({ error: "Bad Request: Validation failed" });
         return;
     }
 
     if (err instanceof mongoose.Error.CastError) {
-        logger.error("MongoDB Cast Error", {
+        logger.warn("MongoDB Cast Error", {
             message: err.message,
-            stack: err.stack,
         });
         res.status(400).json({ error: "Bad Request: Invalid ID format" });
         return;
@@ -43,9 +40,8 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
 
     if (err instanceof AppError) {
         if (err.statusCode >= 400 && err.statusCode < 500) {
-            logger.error("Client Error", {
+            logger.warn("Client Error", {
                 message: err.message,
-                stack: err.stack,
             });
             res.status(err.statusCode).json({ error: err.message });
             return;
@@ -64,7 +60,7 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
         return;
     }
     if (err instanceof jwt.JsonWebTokenError) {
-        logger.error("Invalid token", { message: err.message });
+        logger.warn("Invalid token", { message: err.message });
         res.status(401).json({ error: "Unauthorized: Invalid token" });
         return;
     }
