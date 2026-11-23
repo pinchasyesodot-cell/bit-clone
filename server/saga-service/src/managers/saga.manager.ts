@@ -5,7 +5,7 @@ import {
     type Saga,
     type SagaWithoutIdAndStatus,
 } from "../interfaces/SagaType.js";
-import { v4 as uuidv4 } from "uuid";
+import { v7 as uuidv7 } from "uuid";
 import { SagaRepository } from "../repository/saga.repository.js";
 import { rabbitMQConfig } from "../config/rabbitmq.js";
 import { api } from "../api/base.api.js";
@@ -23,7 +23,7 @@ export class SagaManager {
             throw new AppError("Cannot send money to yourself", 400);
         }
 
-        const sagaId = uuidv4();
+        const sagaId = uuidv7();
         const status = SagaStatus.PENDING;
         const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
 
