@@ -4,11 +4,11 @@ import { wrapAsync } from "../utils/wrapAsync.js";
 import { AppError } from "../utils/AppError.js";
 
 export class AccountController {
-    static getSagaState = async (req: Request<{ sagaId: string }>, res: Response): Promise<void> => {
+    static getSagaState = wrapAsync(async (req: Request<{ sagaId: string }>, res: Response): Promise<void> => {
         const { sagaId } = req.params;
         const result = await AccountService.getSagaState(sagaId);
         res.status(200).json(result);
-    };
+    });
 
     static getMyAccount = wrapAsync(async (req: Request, res: Response): Promise<void> => {
         if (!req.user) throw new AppError("Unauthorized", 401);
