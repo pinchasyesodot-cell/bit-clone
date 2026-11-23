@@ -7,6 +7,11 @@ import { errorMessage } from "../utils/errorMessage.js";
 
 type CommandHandler = (msg: unknown) => Promise<void>;
 
+export const failureAction = (error: unknown, redelivered: boolean): "requeue" | "deadLetter" => {
+    const permanent = error instanceof SyntaxError || error instanceof InvalidMessageError;
+    return permanent || redelivered ? "deadLetter" : "requeue";
+};
+
 class RabbitMQConfig {
     public publishTimeoutMs = 5000;
     public drainTimeoutMs = 5000;
@@ -148,8 +153,7 @@ class RabbitMQConfig {
                 stack: error instanceof Error ? error.stack : undefined,
             });
 
-            const permanent = error instanceof SyntaxError || error instanceof InvalidMessageError;
-            if (!permanent && !msg.fields.redelivered) {
+            if (failureAction(error, msg.fields.redelivered) === "requeue") {
                 this.safeNack(channel, msg, true);
                 return;
             }
