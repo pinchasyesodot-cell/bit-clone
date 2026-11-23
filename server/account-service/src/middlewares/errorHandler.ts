@@ -3,8 +3,10 @@ import { AppError } from "../utils/AppError.js";
 import { logger } from "../utils/logger.js";
 import type { ErrorRequestHandler } from "express";
 import { isDuplicateKey } from "../utils/mongoErrors.js";
+import mongoose from "mongoose";
+import jwt from "jsonwebtoken";
 
-export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void => {
+export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next): void => {
     if (err instanceof Joi.ValidationError) {
         logger.error("Joi Validation Error:", {
             details: err.details,
@@ -13,7 +15,7 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
         return;
     }
     if (isDuplicateKey(err)) {
-        logger.error("MongoDB Duplicate Key Error:", {
+        logger.error("MongoDB Duplicate Key Error", {
             message: err.message,
             stack: err.stack,
         });
@@ -21,8 +23,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
         return;
     }
 
-    if (err.name === "ValidationError") {
-        logger.error("MongoDB Validation Error:", {
+    if (err instanceof mongoose.Error.ValidationError) {
+        logger.error("MongoDB Validation Error", {
             message: err.message,
             stack: err.stack,
         });
@@ -30,8 +32,8 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
         return;
     }
 
-    if (err.name === "CastError") {
-        logger.error("MongoDB Cast Error:", {
+    if (err instanceof mongoose.Error.CastError) {
+        logger.error("MongoDB Cast Error", {
             message: err.message,
             stack: err.stack,
         });
@@ -41,14 +43,14 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
 
     if (err instanceof AppError) {
         if (err.statusCode >= 400 && err.statusCode < 500) {
-            logger.error("Client Error:", {
+            logger.error("Client Error", {
                 message: err.message,
                 stack: err.stack,
             });
             res.status(err.statusCode).json({ error: err.message });
             return;
         } else {
-            logger.error("Server Error:", {
+            logger.error("Server Error", {
                 message: err.message,
                 stack: err.stack,
             });
@@ -56,20 +58,18 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next): void =
             return;
         }
     }
-    if (err.name === "TokenExpiredError") {
+    if (err instanceof jwt.TokenExpiredError) {
         logger.warn("Expired token", { message: err.message });
         res.status(401).json({ error: "Unauthorized: Token expired" });
         return;
     }
-    if (err.name === "JsonWebTokenError") {
+    if (err instanceof jwt.JsonWebTokenError) {
         logger.error("Invalid token", { message: err.message });
         res.status(401).json({ error: "Unauthorized: Invalid token" });
         return;
     }
-    logger.error("Unhandled Error:", {
-        name: err.name,
-        message: err.message,
-        stack: err.stack,
+    logger.error("Unhandled Error", {
+        error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : String(err),
     });
     res.status(500).json({ error: "Internal Server Error" });
 };

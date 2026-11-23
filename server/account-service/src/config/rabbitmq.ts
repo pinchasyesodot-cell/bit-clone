@@ -3,6 +3,7 @@ import { config } from "../config/env.js";
 import type { SagaResponse } from "../interfaces/saga.type.js";
 import { logger } from "../utils/logger.js";
 import { InvalidMessageError } from "../utils/InvalidMessageError.js";
+import { errorMessage } from "../utils/errorMessage.js";
 
 type CommandHandler = (msg: unknown) => Promise<void>;
 
@@ -31,7 +32,9 @@ class RabbitMQConfig {
         this.closing = false;
         this.connection = connection;
         logger.info("Connected to RabbitMQ successfully");
-        connection.on("error", (error: unknown) => logger.error(`RabbitMQ connection error: ${error}`));
+        connection.on("error", (error: unknown) =>
+            logger.error("RabbitMQ connection error", { error: errorMessage(error) })
+        );
         connection.on("close", () => this.exitIfUnexpected("connection"));
         return connection;
     };
@@ -46,7 +49,9 @@ class RabbitMQConfig {
         this.publishChannel ??= this.connect()
             .then(async (connection) => {
                 const channel = await connection.createConfirmChannel();
-                channel.on("error", (error: unknown) => logger.error(`RabbitMQ publish channel error: ${error}`));
+                channel.on("error", (error: unknown) =>
+                    logger.error("RabbitMQ publish channel error", { error: errorMessage(error) })
+                );
                 channel.on("close", () => {
                     this.publishChannel = null;
                     this.publishedQueues.clear();
@@ -64,7 +69,9 @@ class RabbitMQConfig {
         if (this.consumeChannel) return this.consumeChannel;
         const connection = await this.connect();
         const channel = await connection.createChannel();
-        channel.on("error", (error: unknown) => logger.error(`RabbitMQ consume channel error: ${error}`));
+        channel.on("error", (error: unknown) =>
+            logger.error("RabbitMQ consume channel error", { error: errorMessage(error) })
+        );
         channel.on("close", () => this.exitIfUnexpected("consume channel"));
         this.consumeChannel = channel;
         return channel;
@@ -83,7 +90,7 @@ class RabbitMQConfig {
             channel.sendToQueue(queueName, content, { ...options, persistent: true }, (error: unknown) => {
                 clearTimeout(timer);
                 if (error) {
-                    reject(error instanceof Error ? error : new Error(String(error)));
+                    reject(error instanceof Error ? error : new Error(errorMessage(error)));
                 } else {
                     resolve();
                 }
@@ -119,7 +126,7 @@ class RabbitMQConfig {
         } catch (error) {
             logger.error("Failed to nack message", {
                 queue: msg.fields.routingKey,
-                error: error instanceof Error ? error.message : String(error),
+                error: errorMessage(error),
             });
         }
     };
@@ -134,7 +141,7 @@ class RabbitMQConfig {
             await callback(command);
             channel.ack(msg);
         } catch (error) {
-            const reason = error instanceof Error ? error.message : String(error);
+            const reason = errorMessage(error);
             logger.error("Failed to process message", {
                 queue: msg.fields.routingKey,
                 error: reason,
@@ -164,18 +171,21 @@ class RabbitMQConfig {
         const channel = await this.getConsumeChannel();
         await channel.assertQueue(queueName, { durable: true });
         await channel.prefetch(1);
-        const { consumerTag } = await channel.consume(queueName, async (msg) => {
+        const { consumerTag } = await channel.consume(queueName, (msg) => {
             if (msg === null) return;
-            const work = this.handleMessage(channel, msg, callback);
-            this.inFlight.add(work);
-            try {
-                await work;
-            } finally {
-                this.inFlight.delete(work);
-            }
+            void this.trackInFlight(this.handleMessage(channel, msg, callback));
         });
         this.consumerTags.push(consumerTag);
         logger.info("Consuming messages", { queue: queueName });
+    };
+
+    private trackInFlight = async (work: Promise<void>): Promise<void> => {
+        this.inFlight.add(work);
+        try {
+            await work;
+        } finally {
+            this.inFlight.delete(work);
+        }
     };
 
     public close = async (): Promise<void> => {
@@ -195,7 +205,7 @@ class RabbitMQConfig {
             await publishChannel?.close();
             await this.connection?.close();
         } catch (error) {
-            logger.warn(`Error while closing RabbitMQ connection: ${error}`);
+            logger.warn("Error while closing RabbitMQ connection", { error: errorMessage(error) });
         } finally {
             this.connecting = null;
             this.connection = null;
