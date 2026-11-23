@@ -82,16 +82,19 @@ Connect with `io(url, { auth: { token } })`. Each user receives events about the
 
 ## Configuration
 
-| Variable           | Meaning                                                                                                      |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `PORT`             | port the service listens on                                                                                  |
-| `NODE_ENV`         | `development`, `production` or `test`                                                                        |
-| `MONGO_URI`        | MongoDB connection string                                                                                    |
-| `RABBITMQ_URI`     | RabbitMQ connection string                                                                                   |
-| `URL_ACCOUNTS`     | base URL of the accounts service                                                                             |
-| `JWT_SECRET`       | signing secret, the same value in every service that verifies tokens                                         |
-| `URL_CLIENT`       | allowed origin of the web client (required)                                                                  |
-| `INTERNAL_API_KEY` | shared secret for the internal account-service endpoint; at least 32 characters, same value in both services |
+| Variable              | Meaning                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`                | port the service listens on                                                                                  |
+| `NODE_ENV`            | `development`, `production` or `test`                                                                        |
+| `MONGO_URI`           | MongoDB connection string                                                                                    |
+| `RABBITMQ_URI`        | RabbitMQ connection string                                                                                   |
+| `URL_ACCOUNTS`        | base URL of the accounts service                                                                             |
+| `JWT_SECRET`          | signing secret, the same value in every service that verifies tokens                                         |
+| `URL_CLIENT`          | allowed origin of the web client (required)                                                                  |
+| `INTERNAL_API_KEY`    | shared secret for the internal account-service endpoint; at least 32 characters, same value in both services |
+| `TRANSFER_RATE_LIMIT` | transfers a user may start per minute; more answer `429` (optional, default 10)                              |
+
+The rate limit is counted in memory, so each running instance counts on its own. Running more than one instance needs a shared store (for example Redis).
 
 If the connection to RabbitMQ is lost the service exits, so the container's restart policy starts it again.
 

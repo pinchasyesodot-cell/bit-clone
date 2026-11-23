@@ -10,6 +10,7 @@ export const config = {
     JWT_SECRET: env.get("JWT_SECRET").required().asString(),
     URL_CLIENT: env.get("URL_CLIENT").required().asUrlObject().origin,
     INTERNAL_API_KEY: env.get("INTERNAL_API_KEY").required().asString(),
+    TRANSFER_RATE_LIMIT: env.get("TRANSFER_RATE_LIMIT").default("10").asIntPositive(),
 };
 
 if (config.INTERNAL_API_KEY.length < 32) {

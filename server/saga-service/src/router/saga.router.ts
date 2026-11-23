@@ -3,6 +3,7 @@ import { SagaController } from "../controller/saga.controller.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { sagaValidationSchema } from "../validations/saga.validation.js";
 import { validateToken } from "../middlewares/validateToken.js";
+import { transferRateLimit } from "../middlewares/transferRateLimit.js";
 
 class SagaRouter {
     public router: Router;
@@ -13,7 +14,13 @@ class SagaRouter {
     }
 
     private initializeRoutes(): void {
-        this.router.post("/", validateToken, validateRequest(sagaValidationSchema, "body"), SagaController.createSaga);
+        this.router.post(
+            "/",
+            validateToken,
+            transferRateLimit,
+            validateRequest(sagaValidationSchema, "body"),
+            SagaController.createSaga
+        );
     }
 }
 

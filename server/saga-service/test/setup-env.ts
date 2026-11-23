@@ -8,3 +8,4 @@ process.env.URL_ACCOUNTS = "http://localhost:4010/api/accounts";
 process.env.JWT_SECRET = "test-secret";
 process.env.URL_CLIENT = "http://localhost:3000";
 process.env.INTERNAL_API_KEY = "0123456789abcdefghejkqwertyuiopv";
+process.env.TRANSFER_RATE_LIMIT = "1000";
