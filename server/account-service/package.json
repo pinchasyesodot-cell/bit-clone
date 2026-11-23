@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "start": "node --enable-source-maps dist/index.js",
     "dev": "tsx watch src/index.ts",
@@ -16,7 +20,6 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
     "amqplib": "^2.2.1",
     "cors": "^2.8.6",
