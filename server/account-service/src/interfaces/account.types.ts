@@ -18,8 +18,6 @@ export interface Account {
     updatedAt: Date;
 }
 
-export type CreateAccountRequest = Omit<Account, "accountNumber" | "balance" | "status" | "createdAt" | "updatedAt">;
-
 export type AccountDTO = Omit<Account, "createdAt" | "updatedAt">;
 
 export enum StepStatus {

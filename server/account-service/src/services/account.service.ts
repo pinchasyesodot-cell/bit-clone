@@ -11,6 +11,8 @@ import { type AccountsSagaState, type Saga, ALREADY_CREDITED } from "../interfac
 import { AccountSagaRepository } from "../repository/accountSaga.repository.js";
 import { withTransaction } from "../utils/transaction.js";
 import { NotFound } from "../utils/AppError.js";
+import { generateAccountNumber } from "../utils/accountNumber.js";
+import { isDuplicateKey } from "../utils/mongoErrors.js";
 
 export class AccountService {
     private static getDebitFailureReason = async (userId: string, session: ClientSession): Promise<AccountError> => {
@@ -130,6 +132,15 @@ export class AccountService {
             credited: card.credit === StepStatus.COMPLETED,
             refunded: card.refund === StepStatus.COMPLETED,
         };
+    };
+
+    static openAccount = async (userId: string): Promise<boolean> => {
+        try {
+            return await AccountRepository.openAccount(userId, generateAccountNumber());
+        } catch (error) {
+            if (isDuplicateKey(error, "userId")) return false;
+            throw error;
+        }
     };
 
     static getMyAccount = async (userId: string): Promise<AccountDTO> => {

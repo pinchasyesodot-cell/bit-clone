@@ -298,3 +298,31 @@ describe("getSagaState", () => {
         });
     });
 });
+
+describe("openAccount", () => {
+    const NEW_USER = "555555555";
+
+    it("opens an account with a zero balance", async () => {
+        expect(await AccountService.openAccount(NEW_USER)).toBe(true);
+
+        const account = await AccountModel.findOne({ userId: NEW_USER }).lean();
+        expect(account?.balance).toBe(0);
+        expect(account?.status).toBe(AccountStatus.ACTIVE);
+        expect(account?.accountNumber).toMatch(/^\d{12}$/);
+    });
+
+    it("does not open a second account or touch the balance when the event arrives again", async () => {
+        await AccountService.openAccount(NEW_USER);
+        await AccountModel.updateOne({ userId: NEW_USER }, { $set: { balance: 700 } });
+
+        expect(await AccountService.openAccount(NEW_USER)).toBe(false);
+        expect(await AccountModel.countDocuments({ userId: NEW_USER })).toBe(1);
+        expect(await balanceOf(NEW_USER)).toBe(700);
+    });
+
+    it("opens a single account when the same event arrives twice at the same time", async () => {
+        await Promise.all([AccountService.openAccount(NEW_USER), AccountService.openAccount(NEW_USER)]);
+
+        expect(await AccountModel.countDocuments({ userId: NEW_USER })).toBe(1);
+    });
+});

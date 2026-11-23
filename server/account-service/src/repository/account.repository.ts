@@ -1,6 +1,6 @@
 import type { ClientSession } from "mongoose";
 import { AccountModel } from "../models/account.model.js";
-import { AccountStatus, type AccountDTO, type CreateAccountRequest } from "../interfaces/account.types.js";
+import { AccountStatus, AccountType, type AccountDTO } from "../interfaces/account.types.js";
 
 const EXCLUDED_FIELDS = "-_id -__v -updatedAt -createdAt";
 
@@ -55,8 +55,19 @@ export class AccountRepository {
             .exec();
     };
 
-    static create = async (account: CreateAccountRequest, session?: ClientSession): Promise<AccountDTO> => {
-        const createdAccount = new AccountModel(account);
-        return (await createdAccount.save({ session: session ?? null })).toJSON() as AccountDTO;
+    static openAccount = async (userId: string, accountNumber: string): Promise<boolean> => {
+        const result = await AccountModel.updateOne(
+            { userId },
+            {
+                $setOnInsert: {
+                    accountNumber,
+                    balance: 0,
+                    status: AccountStatus.ACTIVE,
+                    type: AccountType.CHECKING,
+                },
+            },
+            { upsert: true }
+        ).exec();
+        return result.upsertedCount === 1;
     };
 }
