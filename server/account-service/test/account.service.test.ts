@@ -193,7 +193,7 @@ describe("handleCredit", () => {
         expect(result).toEqual({ success: false, error: AccountError.DEBIT_NOT_COMPLETED });
         expect(await balanceOf(RECEIVER)).toBe(0);
     });
-    
+
     it("credits the receiver stored at debit time, not the one in the credit command", async () => {
         await AccountService.handleDebit(makeSaga());
 
