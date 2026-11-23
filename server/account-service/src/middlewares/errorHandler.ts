@@ -34,7 +34,7 @@ export const errorHandler: ErrorRequestHandler = (err: unknown, _req, res, _next
         logger.warn("MongoDB Cast Error", {
             message: err.message,
         });
-        res.status(400).json({ error: "Bad Request: Invalid ID format" });
+        res.status(400).json({ error: "Bad Request: Invalid value" });
         return;
     }
 

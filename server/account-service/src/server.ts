@@ -43,7 +43,7 @@ class Server {
                 res.status(200).json({ status: "OK", db: "Connected" });
                 return;
             }
-            logger.error("Health check failed: Database is not connected");
+            logger.warn("Health check failed: Database is not connected");
             res.status(503).json({ status: "Error", db: "Not connected" });
         });
     };
