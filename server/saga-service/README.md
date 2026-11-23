@@ -55,7 +55,7 @@ Replies, sent to `saga_response_queue`:
 
 `type` is `DEBIT_RESPONSE`, `CREDIT_RESPONSE` or `REFUND_RESPONSE`. On failure `success` is `false` and `error` may carry a reason.
 
-State check: `GET {URL_ACCOUNTS}/{sagaId}` always answers `200` with `{ "debited": boolean, "credited": boolean, "refunded": boolean }` (all `false` when nothing happened for that saga, never `404`).
+State check: `GET {URL_ACCOUNTS}/sagas/{sagaId}` with the header `x-internal-key: <INTERNAL_API_KEY>`. It always answers `200` with `{ "debited": boolean, "credited": boolean, "refunded": boolean }` (all `false` when nothing happened for that saga, never `404`).
 
 Rules for the accounts service, all per `sagaId`:
 
@@ -82,15 +82,16 @@ Connect with `io(url, { auth: { token } })`. Each user receives events about the
 
 ## Configuration
 
-| Variable       | Meaning                                                              |
-| -------------- | -------------------------------------------------------------------- |
-| `PORT`         | port the service listens on                                          |
-| `NODE_ENV`     | `development`, `production` or `test`                                |
-| `MONGO_URI`    | MongoDB connection string                                            |
-| `RABBITMQ_URI` | RabbitMQ connection string                                           |
-| `URL_ACCOUNTS` | base URL of the accounts service                                     |
-| `JWT_SECRET`   | signing secret, the same value in every service that verifies tokens |
-| `URL_CLIENT`   | allowed origin of the web client (required)                          |
+| Variable           | Meaning                                                                                                      |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`             | port the service listens on                                                                                  |
+| `NODE_ENV`         | `development`, `production` or `test`                                                                        |
+| `MONGO_URI`        | MongoDB connection string                                                                                    |
+| `RABBITMQ_URI`     | RabbitMQ connection string                                                                                   |
+| `URL_ACCOUNTS`     | base URL of the accounts service                                                                             |
+| `JWT_SECRET`       | signing secret, the same value in every service that verifies tokens                                         |
+| `URL_CLIENT`       | allowed origin of the web client (required)                                                                  |
+| `INTERNAL_API_KEY` | shared secret for the internal account-service endpoint; at least 32 characters, same value in both services |
 
 If the connection to RabbitMQ is lost the service exits, so the container's restart policy starts it again.
 

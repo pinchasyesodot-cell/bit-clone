@@ -84,7 +84,7 @@ export class SagaManager {
     };
 
     private static reconcile = async (saga: Saga): Promise<void> => {
-        const { data } = await api.get<AccountsSagaState>(`/${saga.sagaId}`);
+        const { data } = await api.get<AccountsSagaState>(`/sagas/${saga.sagaId}`);
         const open = [SagaStatus.PENDING, SagaStatus.PROCESSING];
         const nextStatus = this.resolveTimeOutStatus(data);
 

@@ -259,7 +259,7 @@ describe("handleTimeouts (a service did not reply within 10 seconds)", () => {
 
         await SagaManager.handleTimeouts();
 
-        expect(mockAccountsGet).toHaveBeenCalledWith("/saga-1");
+        expect(mockAccountsGet).toHaveBeenCalledWith("/sagas/saga-1");
         expect(mockTransition).toHaveBeenCalledWith("saga-1", OPEN, SagaStatus.COMPENSATING);
         const compensating = makeSaga({ status: SagaStatus.COMPENSATING });
         expect(mockPublish).toHaveBeenCalledWith("refund_queue", { type: "REFUND_COMMAND", payload: compensating });
