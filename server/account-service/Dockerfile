@@ -2,7 +2,7 @@ FROM node:26-alpine AS build
 
 WORKDIR /src/app
 
-COPY package*.json .npmrc ./
+COPY package*.json ./
 
 RUN npm ci
 
@@ -18,7 +18,7 @@ WORKDIR /src/app
 ENV NODE_ENV=production
 ENV DOTENV_CONFIG_QUIET=true
 
-COPY package*.json .npmrc ./
+COPY package*.json ./
 
 RUN npm ci --omit=dev && npm cache clean --force
 
