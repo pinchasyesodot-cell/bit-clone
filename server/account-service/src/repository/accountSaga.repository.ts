@@ -16,6 +16,7 @@ export class AccountSagaRepository {
                     $setOnInsert: {
                         amount: saga.amount,
                         senderId: saga.senderId,
+                        receiverId: saga.receiverId,
                     },
                 },
                 { runValidators: true, upsert: true }

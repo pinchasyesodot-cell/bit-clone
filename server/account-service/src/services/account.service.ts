@@ -86,9 +86,9 @@ export class AccountService {
                 return { success: false, error: AccountError.DEBIT_NOT_COMPLETED };
             }
 
-            const account = await AccountRepository.credit(saga.receiverId, card.amount, session);
+            const account = await AccountRepository.credit(card.receiverId, card.amount, session);
             if (!account) {
-                const reason = await this.getCreditFailureReason(saga.receiverId, session);
+                const reason = await this.getCreditFailureReason(card.receiverId, session);
                 await AccountSagaRepository.rejectCredit(card.sagaId, reason, session);
                 return { success: false, error: reason };
             }

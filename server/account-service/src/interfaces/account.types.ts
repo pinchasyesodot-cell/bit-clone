@@ -29,6 +29,7 @@ export enum StepStatus {
 export interface AccountSaga {
     sagaId: string;
     senderId: string;
+    receiverId: string;
     amount: number;
     debit: StepStatus;
     credit: StepStatus;
