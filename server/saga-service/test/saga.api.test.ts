@@ -78,8 +78,8 @@ describe("POST /api/saga", () => {
         ["zero", 0],
         ["negative", -5],
         ["a string", "50"],
-        ["three decimal places", 10.256],
-        ["above the maximum", 2_000_000],
+        ["a fraction of an agora", 10.5],
+        ["above the maximum", 100_000_001],
     ])("rejects an amount that is %s", async (_label, amount) => {
         const res = await postSaga({ receiverId: "987654321", amount });
         expect(res.status).toBe(400);

@@ -67,12 +67,12 @@ Rules for the accounts service, all per `sagaId`:
 
 ## API
 
-| Method | Path        | Auth         | Body                                    | Success                                   |
-| ------ | ----------- | ------------ | --------------------------------------- | ----------------------------------------- |
-| POST   | `/api/saga` | Bearer token | `{ receiverId (9 characters), amount }` | `201` with the saga                       |
-| GET    | `/health`   | none         | none                                    | `200`, or `503` when the database is down |
+| Method | Path        | Auth         | Body                                | Success                                   |
+| ------ | ----------- | ------------ | ----------------------------------- | ----------------------------------------- |
+| POST   | `/api/saga` | Bearer token | `{ receiverId (9 digits), amount }` | `201` with the saga                       |
+| GET    | `/health`   | none         | none                                | `200`, or `503` when the database is down |
 
-`amount` is a number greater than 0, up to 1,000,000 and with at most two decimals. The sender is always the user in the token. A body with `senderId` or any other unknown field is rejected, and so is a transfer to yourself. Errors are JSON: `{ "error": "..." }`.
+`amount` is in agorot: a whole number from 1 to 100,000,000 (1,000,000 ₪). The client converts with `Math.round(shekels * 100)`. The sender is always the user in the token. A body with `senderId` or any other unknown field is rejected, and so is a transfer to yourself. Errors are JSON: `{ "error": "..." }`.
 
 If the debit command cannot be confirmed by the broker the request still answers `201`: the saga is stored and the timeout check resolves it.
 

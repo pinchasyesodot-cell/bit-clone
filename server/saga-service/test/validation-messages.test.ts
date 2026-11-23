@@ -19,9 +19,9 @@ const postSaga = (body: unknown) =>
 
 describe("POST /api/saga: validation messages reach the client", () => {
     it.each([
-        ["a receiverId that is too short", { receiverId: "123", amount: 10 }, /exactly 9 characters/],
+        ["a receiverId that is too short", { receiverId: "123", amount: 10 }, /exactly 9 digits/],
         ["a missing receiverId", { amount: 10 }, /Receiver ID is a required field/],
-        ["an amount of zero", { receiverId: "987654321", amount: 0 }, /greater than 0/],
+        ["an amount of zero", { receiverId: "987654321", amount: 0 }, /at least 1 agora/],
         ["an amount sent as a string", { receiverId: "987654321", amount: "10" }, /valid number/],
         ["a missing amount", { receiverId: "987654321" }, /Amount is a required field/],
         ["a client-supplied senderId", { senderId: "111111111", receiverId: "987654321", amount: 10 }, /senderId/],

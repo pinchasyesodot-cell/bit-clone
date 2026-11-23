@@ -5,9 +5,8 @@ const validate = (payload: unknown) => sagaValidationSchema.validate(payload, { 
 describe("sagaValidationSchema", () => {
     it.each([
         ["a regular amount", { receiverId: "987654321", amount: 100 }],
-        ["the smallest amount (one agora)", { receiverId: "987654321", amount: 0.01 }],
-        ["two decimal places", { receiverId: "987654321", amount: 10.25 }],
-        ["the maximum amount", { receiverId: "987654321", amount: 1_000_000 }],
+        ["the smallest amount (one agora)", { receiverId: "987654321", amount: 1 }],
+        ["the maximum amount (1,000,000 ₪)", { receiverId: "987654321", amount: 100_000_000 }],
         ["a receiverId with surrounding spaces (trimmed)", { receiverId: " 987654321 ", amount: 5 }],
     ])("accepts %s", (_label, payload) => {
         expect(validate(payload).error).toBeUndefined();
@@ -24,10 +23,11 @@ describe("sagaValidationSchema", () => {
         ["an amount of zero", { receiverId: "987654321", amount: 0 }],
         ["a negative amount", { receiverId: "987654321", amount: -5 }],
         ["an amount sent as a string", { receiverId: "987654321", amount: "100" }],
-        ["an amount with three decimal places", { receiverId: "987654321", amount: 10.256 }],
-        ["an amount above the maximum", { receiverId: "987654321", amount: 1_000_000.01 }],
+        ["a fraction of an agora", { receiverId: "987654321", amount: 10.5 }],
+        ["an amount above the maximum", { receiverId: "987654321", amount: 100_000_001 }],
         ["a null amount", { receiverId: "987654321", amount: null }],
         ["a boolean amount", { receiverId: "987654321", amount: true }],
+        ["a receiverId with letters", { receiverId: "12345678a", amount: 100 }],
     ])("rejects %s", (_label, payload) => {
         expect(validate(payload).error).toBeDefined();
     });
