@@ -14,7 +14,7 @@ let replSet: MongoMemoryReplSet;
 const USER_ID = 123456789;
 const SECRET = process.env.JWT_SECRET!;
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY!;
-const SAGA_ID = "0b8e4c1a-7f2d-4a51-9c3e-5d6f7a8b9c0d";
+const SAGA_ID = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 
 const tokenFor = (userId: number, options: jwt.SignOptions = {}, secret = SECRET): string =>
     jwt.sign({ userId }, secret, { algorithm: "HS256", expiresIn: "1h", ...options });

@@ -19,7 +19,7 @@ jest.unstable_mockModule("../src/services/account.service.js", () => ({
 const { startConsumers } = await import("../src/consumers/account.consumer.js");
 const { InvalidMessageError } = await import("../src/utils/InvalidMessageError.js");
 
-const SAGA_ID = "0b8e4c1a-7f2d-4a51-9c3e-5d6f7a8b9c0d";
+const SAGA_ID = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 const debit = {
     type: "DEBIT_COMMAND",
     payload: { sagaId: SAGA_ID, senderId: "123456789", receiverId: "987654321", amount: 500, status: "PENDING" },
