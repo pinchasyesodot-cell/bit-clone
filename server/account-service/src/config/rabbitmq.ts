@@ -162,9 +162,9 @@ class RabbitMQConfig {
                 await this.deadLetter(msg, reason);
                 channel.ack(msg);
             } catch (deadLetterError) {
-                logger.error("Filed to dead-letter message", {
+                logger.error("Failed to dead-letter message", {
                     queue: msg.fields.routingKey,
-                    error: deadLetterError instanceof Error ? deadLetterError.message : String(deadLetterError),
+                    error: errorMessage(deadLetterError),
                 });
                 this.safeNack(channel, msg, false);
             }
