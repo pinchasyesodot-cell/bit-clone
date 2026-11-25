@@ -13,6 +13,8 @@ import { logger } from "../utils/logger.js";
 import socketIo from "../service/socket.service.js";
 import { AppError } from "../utils/AppError.js";
 import { isDuplicateKey } from "../utils/mongoErrors.js";
+import { validateMessage } from "../validations/validateMessage.js";
+import { sagaResponseSchema } from "../validations/sagaResponse.validation.js";
 
 export class SagaManager {
     static isProcessing = false;
@@ -138,7 +140,7 @@ export class SagaManager {
 
     static consumeSagaMessages = async (): Promise<void> => {
         await rabbitMQConfig.consumeMessages("saga_response_queue", async (msg) => {
-            const { type, payload } = msg;
+            const { type, payload } = validateMessage(sagaResponseSchema, msg);
             const { sagaId, success, error } = payload;
 
             switch (type) {
