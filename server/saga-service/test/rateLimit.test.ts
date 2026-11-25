@@ -34,7 +34,7 @@ const transferFrom = (userId: number) =>
         .send({ receiverId: "987654321", amount: 150 });
 
 beforeEach(() => {
-    mockCreate.mockImplementation(async (saga) => saga);
+    mockCreate.mockImplementation((saga) => Promise.resolve(saga));
     mockPublish.mockResolvedValue(undefined);
 });
 

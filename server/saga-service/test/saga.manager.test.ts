@@ -77,11 +77,11 @@ beforeEach(() => {
     SagaManager.isProcessing = false;
     mockConsume.mockResolvedValue(undefined);
     mockPublish.mockResolvedValue(undefined);
-    mockCreate.mockImplementation(async (saga) => saga);
-    mockTransition.mockImplementation(async (sagaId, _from, to) => makeSaga({ sagaId, status: to }));
+    mockCreate.mockImplementation((saga) => Promise.resolve(saga));
+    mockTransition.mockImplementation((sagaId, _from, to) => Promise.resolve(makeSaga({ sagaId, status: to })));
     mockFindTimedOutOpenSagas.mockResolvedValue([]);
     mockFindUnconfirmedRefunds.mockResolvedValue([]);
-    mockRefreshUpdatedAt.mockImplementation(async (sagaId, status) => makeSaga({ sagaId, status }));
+    mockRefreshUpdatedAt.mockImplementation((sagaId, status) => Promise.resolve(makeSaga({ sagaId, status })));
 });
 
 describe("createSaga", () => {

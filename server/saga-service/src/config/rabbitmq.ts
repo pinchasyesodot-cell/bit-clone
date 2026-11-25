@@ -36,7 +36,9 @@ class RabbitMQConfig {
         const connection = await amqp.connect(config.RABBITMQ_URI);
         this.closing = false;
         this.connection = connection;
-        connection.on("error", (error: unknown) => logger.error(`RabbitMQ connection error: ${error}`));
+        connection.on("error", (error: unknown) =>
+            logger.error("RabbitMQ connection error", { error: errorMessage(error) })
+        );
         connection.on("close", () => this.exitIfUnexpected("connection"));
         return connection;
     };
@@ -51,7 +53,9 @@ class RabbitMQConfig {
         this.publishChannel ??= this.connect()
             .then(async (connection) => {
                 const channel = await connection.createConfirmChannel();
-                channel.on("error", (error: unknown) => logger.error(`RabbitMQ publish channel error: ${error}`));
+                channel.on("error", (error: unknown) =>
+                    logger.error("RabbitMQ publish channel error", { error: errorMessage(error) })
+                );
                 channel.on("close", () => {
                     this.publishChannel = null;
                     this.publishedQueues.clear();
@@ -69,7 +73,9 @@ class RabbitMQConfig {
         if (this.consumeChannel) return this.consumeChannel;
         const connection = await this.connect();
         const channel = await connection.createChannel();
-        channel.on("error", (error: unknown) => logger.error(`RabbitMQ consume channel error: ${error}`));
+        channel.on("error", (error: unknown) =>
+            logger.error("RabbitMQ consume channel error", { error: errorMessage(error) })
+        );
         channel.on("close", () => this.exitIfUnexpected("consume channel"));
         this.consumeChannel = channel;
         return channel;
@@ -88,7 +94,7 @@ class RabbitMQConfig {
             channel.sendToQueue(queueName, content, { ...options, persistent: true }, (error: unknown) => {
                 clearTimeout(timer);
                 if (error) {
-                    reject(error instanceof Error ? error : new Error(String(error)));
+                    reject(error instanceof Error ? error : new Error(errorMessage(error)));
                 } else {
                     resolve();
                 }
@@ -199,7 +205,7 @@ class RabbitMQConfig {
             await publishChannel?.close();
             await this.connection?.close();
         } catch (error) {
-            logger.warn(`Error while closing RabbitMQ connection: ${error}`);
+            logger.warn("Error while closing RabbitMQ connection", { error: errorMessage(error) });
         } finally {
             this.connecting = null;
             this.connection = null;

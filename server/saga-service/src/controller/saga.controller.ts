@@ -13,7 +13,7 @@ export class SagaController {
         if (idempotencyKey !== undefined && !isUuid(idempotencyKey)) {
             throw new AppError("Idempotency-Key must be a UUID", 400);
         }
-        const body: bodySaga = req.body;
+        const body = req.body as bodySaga;
         const { saga, created } = await SagaManager.createSaga(
             { ...body, senderId: String(req.user.userId) },
             idempotencyKey

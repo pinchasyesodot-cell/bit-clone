@@ -15,6 +15,7 @@ import { AppError } from "../utils/AppError.js";
 import { isDuplicateKey } from "../utils/mongoErrors.js";
 import { validateMessage } from "../validations/validateMessage.js";
 import { sagaResponseSchema } from "../validations/sagaResponse.validation.js";
+import { errorMessage } from "../utils/errorMessage.js";
 
 export class SagaManager {
     static isProcessing = false;
@@ -55,9 +56,10 @@ export class SagaManager {
         try {
             await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
         } catch (error) {
-            logger.error(
-                `Debit command of saga ${sagaId} was not confirmed, the timeout check will resolve it: ${error}`
-            );
+            logger.error("Debit command was not confirmed, the timeout check will resolve it", {
+                sagaId,
+                error: errorMessage(error),
+            });
         }
 
         return { saga: newSaga, created: true };
@@ -82,13 +84,13 @@ export class SagaManager {
                 try {
                     await this.reconcile(saga);
                 } catch (error) {
-                    logger.error(`Timeout handling failed for saga ${saga.sagaId}: ${error}`);
+                    logger.error("Timeout handling failed", { sagaId: saga.sagaId, error: errorMessage(error) });
                 }
             }
 
             await this.resendUnconfirmedRefunds();
         } catch (error) {
-            logger.error(`General error in handleTimeouts: ${error}`);
+            logger.error("General error in handleTimeouts", { error: errorMessage(error) });
         } finally {
             this.isProcessing = false;
         }
@@ -104,7 +106,7 @@ export class SagaManager {
                 await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: saga });
                 await SagaRepository.refreshUpdatedAt(saga.sagaId, SagaStatus.COMPENSATING);
             } catch (error) {
-                logger.error(`Failed to resend refund command for saga ${saga.sagaId}: ${error}`);
+                logger.error("Failed to resend refund command", { sagaId: saga.sagaId, error: errorMessage(error) });
             }
         }
     };
@@ -155,9 +157,6 @@ export class SagaManager {
                 case "REFUND_RESPONSE":
                     await this.handleRefundResponse(sagaId, success, error);
                     break;
-
-                default:
-                    logger.warn(`Unknown message type: ${type}`);
             }
         });
     };

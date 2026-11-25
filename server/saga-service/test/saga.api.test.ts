@@ -42,7 +42,7 @@ const postSaga = (body: unknown, authorization: string | null = `Bearer ${token}
 describe("POST /api/saga", () => {
     beforeEach(() => {
         mockFind.mockResolvedValue(null);
-        mockCreate.mockImplementation(async (saga) => saga);
+        mockCreate.mockImplementation((saga) => Promise.resolve(saga));
         mockPublish.mockResolvedValue(undefined);
     });
 
@@ -56,9 +56,10 @@ describe("POST /api/saga", () => {
             amount: 150,
             status: "PENDING",
         });
-        expect(typeof res.body.sagaId).toBe("string");
+        const saga = res.body as Saga;
+        expect(typeof saga.sagaId).toBe("string");
         expect(mockPublish).toHaveBeenCalledTimes(1);
-        expect(mockPublish).toHaveBeenCalledWith("debit_queue", { type: "DEBIT_COMMAND", payload: res.body });
+        expect(mockPublish).toHaveBeenCalledWith("debit_queue", { type: "DEBIT_COMMAND", payload: saga });
     });
 
     it("rejects a request without a token", async () => {
@@ -112,7 +113,7 @@ describe("POST /api/saga", () => {
         const res = await postSaga({ receiverId: "987654321", amount: 10 });
 
         expect(res.status).toBe(201);
-        expect(res.body.status).toBe("PENDING");
+        expect(res.body).toMatchObject({ status: "PENDING" });
         expect(JSON.stringify(res.body)).not.toContain("secret");
     });
 
@@ -150,7 +151,7 @@ describe("POST /api/saga", () => {
             const res = await postSaga({ receiverId: "987654321", amount: 150 }, `Bearer ${token}`, KEY);
 
             expect(res.status).toBe(200);
-            expect(res.body.sagaId).toBe("x");
+            expect(res.body).toMatchObject({ sagaId: "x" });
             expect(mockPublish).not.toHaveBeenCalled();
         });
 
@@ -167,7 +168,7 @@ describe("POST /api/saga", () => {
             const res = await postSaga({ receiverId: "987654321", amount: 150 }, `Bearer ${token}`, KEY);
 
             expect(res.status).toBe(200);
-            expect(res.body.sagaId).toBe("x");
+            expect(res.body).toMatchObject({ sagaId: "x" });
             expect(mockCreate).not.toHaveBeenCalled();
             expect(mockPublish).not.toHaveBeenCalled();
         });

@@ -55,17 +55,22 @@ describe("starting the saga service", () => {
     let startup: string[] = [];
     let listenArgs: unknown[] = [];
     let socketInitArgs: unknown[] = [];
+    // Records the step and resolves, like the real async function would.
+    const record = (event: string) => () => {
+        calls.push(event);
+        return Promise.resolve();
+    };
     let interval: { callback: () => void; delay: number } = { callback: () => undefined, delay: 0 };
 
     beforeAll(async () => {
-        mockDbConnect.mockImplementation(async () => void calls.push("database connects"));
+        mockDbConnect.mockImplementation(record("database connects"));
         mockListen.mockImplementation((_port, onListening) => {
             calls.push("listens");
             onListening();
             return fakeHttpServer;
         });
         mockSocketInit.mockImplementation(() => void calls.push("websocket starts"));
-        mockConsume.mockImplementation(async () => void calls.push("starts reading RabbitMQ"));
+        mockConsume.mockImplementation(record("starts reading RabbitMQ"));
         const setIntervalSpy = jest.spyOn(globalThis, "setInterval");
 
         await import("../src/index.js");
@@ -99,9 +104,9 @@ describe("starting the saga service", () => {
 
     it("on SIGTERM: stops the checks, the websocket clients, the HTTP server, RabbitMQ and then the database", async () => {
         calls.length = 0;
-        mockSocketClose.mockImplementation(async () => void calls.push("websocket clients closed"));
-        mockRabbitClose.mockImplementation(async () => void calls.push("rabbitmq closes"));
-        mockDbDisconnect.mockImplementation(async () => void calls.push("database disconnects"));
+        mockSocketClose.mockImplementation(record("websocket clients closed"));
+        mockRabbitClose.mockImplementation(record("rabbitmq closes"));
+        mockDbDisconnect.mockImplementation(record("database disconnects"));
         jest.spyOn(process, "exit").mockImplementation(((code?: number) => {
             calls.push(`exit ${code}`);
         }) as never);

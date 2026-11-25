@@ -6,7 +6,7 @@ const EXCLUDED_FIELDS = "-_id -__v -updatedAt -createdAt";
 export class SagaRepository {
     static create = async (saga: Saga): Promise<Saga> => {
         const doc = new sagaModel(saga);
-        return (await doc.save()).toJSON() as Saga;
+        return (await doc.save()).toJSON();
     };
 
     static findTimedOutOpenSagas = async (cutoff: Date): Promise<Saga[]> => {
@@ -17,7 +17,7 @@ export class SagaRepository {
             })
             .lean()
             .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga[]>;
+            .exec();
     };
 
     static findUnconfirmedRefunds = async (cutoff: Date): Promise<Saga[]> => {
@@ -25,7 +25,7 @@ export class SagaRepository {
             .find({ status: SagaStatus.COMPENSATING, updatedAt: { $lt: cutoff } })
             .lean()
             .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga[]>;
+            .exec();
     };
 
     static refreshUpdatedAt = async (sagaId: string, status: SagaStatus): Promise<Saga | null> => {
@@ -33,7 +33,7 @@ export class SagaRepository {
             .findOneAndUpdate({ sagaId, status }, { updatedAt: new Date() }, { returnDocument: "after" })
             .lean()
             .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga | null>;
+            .exec();
     };
 
     static transition = async (sagaId: string, from: SagaStatus[], to: SagaStatus): Promise<Saga | null> => {
@@ -41,14 +41,10 @@ export class SagaRepository {
             .findOneAndUpdate({ sagaId, status: { $in: from } }, { status: to }, { returnDocument: "after" })
             .lean()
             .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga | null>;
+            .exec();
     };
 
     static findByIdempotencyKey = async (senderId: string, idempotencyKey: string): Promise<Saga | null> => {
-        return sagaModel
-            .findOne({ senderId, idempotencyKey })
-            .lean()
-            .select(EXCLUDED_FIELDS)
-            .exec() as Promise<Saga | null>;
+        return sagaModel.findOne({ senderId, idempotencyKey }).lean().select(EXCLUDED_FIELDS).exec();
     };
 }

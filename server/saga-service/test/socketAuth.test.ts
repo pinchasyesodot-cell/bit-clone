@@ -1,7 +1,8 @@
 import { jest } from "@jest/globals";
 import jwt from "jsonwebtoken";
-import type { ExtendedError, Socket } from "socket.io";
+import type { ExtendedError } from "socket.io";
 import { config } from "../src/config/env.js";
+import type { AppSocket } from "../src/types/socket.js";
 
 jest.unstable_mockModule("../src/utils/logger.js", () => ({
     logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
@@ -14,7 +15,7 @@ type FakeSocket = { handshake: { auth: { token?: string } }; data: { userId?: st
 const runAuth = (token?: string) => {
     const socket: FakeSocket = { handshake: { auth: token === undefined ? {} : { token } }, data: {} };
     const next = jest.fn<(err?: ExtendedError) => void>();
-    socketAuth(socket as unknown as Socket, next);
+    socketAuth(socket as unknown as AppSocket, next);
     return { socket, next };
 };
 

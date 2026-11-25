@@ -86,6 +86,12 @@ const startConsumer = async (callback: (msg: unknown) => Promise<void>): Promise
 // The consumer no longer returns its work; wait for it to finish in the background.
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+// Records the step and resolves, like the real async function would.
+const record = (event: string) => () => {
+    events.push(event);
+    return Promise.resolve();
+};
+
 beforeEach(async () => {
     mockConnect.mockResolvedValue(fakeConnection);
     mockCreateConfirmChannel.mockResolvedValue(publishChannel);
@@ -97,11 +103,11 @@ beforeEach(async () => {
         done(null);
         return true;
     });
-    mockCancel.mockImplementation(async () => void events.push("cancel"));
+    mockCancel.mockImplementation(record("cancel"));
     mockAck.mockImplementation(() => void events.push("ack"));
-    mockCloseConsumeChannel.mockImplementation(async () => void events.push("close consume channel"));
-    mockClosePublishChannel.mockImplementation(async () => void events.push("close publish channel"));
-    mockCloseConnection.mockImplementation(async () => void events.push("close connection"));
+    mockCloseConsumeChannel.mockImplementation(record("close consume channel"));
+    mockClosePublishChannel.mockImplementation(record("close publish channel"));
+    mockCloseConnection.mockImplementation(record("close connection"));
     rabbitMQConfig.publishTimeoutMs = 5000;
     rabbitMQConfig.drainTimeoutMs = 5000;
     await rabbitMQConfig.close();
@@ -172,7 +178,7 @@ describe("publishMessage", () => {
 
 describe("consumeMessages", () => {
     it("declares a durable queue and takes one message at a time", async () => {
-        await startConsumer(async () => undefined);
+        await startConsumer(() => Promise.resolve());
 
         expect(mockAssertQueue).toHaveBeenCalledWith("saga_response_queue", { durable: true });
         expect(mockPrefetch).toHaveBeenCalledWith(1);
@@ -309,14 +315,13 @@ describe("close", () => {
         );
         const consumer = await startConsumer(callback);
         await rabbitMQConfig.publishMessage("debit_queue", command);
-        const handling = consumer(message(JSON.stringify(reply)));
+        consumer(message(JSON.stringify(reply)));
 
         const closing = rabbitMQConfig.close();
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(events).toEqual(["cancel"]);
 
         finish();
-        await handling;
         await closing;
 
         expect(events).toEqual(["cancel", "ack", "close consume channel", "close publish channel", "close connection"]);
@@ -352,7 +357,7 @@ describe("losing the broker", () => {
 
     it("exits when the broker closes the channel that receives the replies", async () => {
         const exit = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
-        await startConsumer(async () => undefined);
+        await startConsumer(() => Promise.resolve());
 
         consumeEvents.fire("close");
 
@@ -370,7 +375,10 @@ describe("losing the broker", () => {
 
     it("does not exit because of its own close()", async () => {
         const exit = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
-        mockCloseConnection.mockImplementation(async () => connectionEvents.fire("close"));
+        mockCloseConnection.mockImplementation(() => {
+            connectionEvents.fire("close");
+            return Promise.resolve();
+        });
         await rabbitMQConfig.publishMessage("debit_queue", command);
 
         await rabbitMQConfig.close();

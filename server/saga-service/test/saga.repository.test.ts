@@ -144,7 +144,7 @@ describe("SagaRepository.refreshUpdatedAt", () => {
 
         expect(refreshed).toBeNull();
         const stored = await sagaModel.collection.findOne({ sagaId: SAGA_ID });
-        expect(Date.now() - new Date(stored?.updatedAt).getTime()).toBeGreaterThan(30_000);
+        expect(Date.now() - (stored?.updatedAt as Date).getTime()).toBeGreaterThan(30_000);
     });
 });
 
