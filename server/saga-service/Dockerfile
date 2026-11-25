@@ -1,8 +1,8 @@
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /src/app
 
-COPY package*.json .npmrc ./
+COPY package*.json ./
 
 RUN npm ci
 
@@ -11,14 +11,14 @@ COPY . .
 RUN npm run build
 
 
-FROM node:22-alpine AS production
+FROM node:26-alpine AS production
 
 WORKDIR /src/app
 
 ENV NODE_ENV=production
 ENV DOTENV_CONFIG_QUIET=true
 
-COPY package*.json .npmrc ./
+COPY package*.json ./
 
 RUN npm ci --omit=dev && npm cache clean --force
 
@@ -28,4 +28,4 @@ USER node
 
 EXPOSE 4005
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "--enable-source-maps", "dist/index.js"]
