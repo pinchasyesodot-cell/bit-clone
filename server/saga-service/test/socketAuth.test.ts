@@ -36,6 +36,10 @@ describe("socketAuth", () => {
         ["garbage instead of a token", "not-a-real-token"],
         ["a token signed with another secret", sign({ userId: 123456789 }, "another-secret")],
         ["an expired token", sign({ userId: 123456789 }, config.JWT_SECRET, { expiresIn: -10 })],
+        [
+            "a token signed with another algorithm",
+            sign({ userId: 123456789 }, config.JWT_SECRET, { algorithm: "HS512" }),
+        ],
         ["a valid token without a userId", sign({})],
         ["a valid token whose userId is not a number", sign({ userId: "abc" })],
         ["a valid token whose userId is not an integer", sign({ userId: 1.5 })],
