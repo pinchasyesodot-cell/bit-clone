@@ -84,8 +84,13 @@ beforeEach(() => {
 
 describe("createSaga", () => {
     it("stores a PENDING saga and asks the accounts service to debit the sender", async () => {
-        const saga = await SagaManager.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
+        const { saga, created } = await SagaManager.createSaga({
+            senderId: SENDER,
+            receiverId: "222222222",
+            amount: 100,
+        });
 
+        expect(created).toBe(true);
         expect(saga.status).toBe(SagaStatus.PENDING);
         expect(saga.sagaId).toMatch(/^[0-9a-f-]{36}$/);
         expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ senderId: SENDER, status: "PENDING" }));
@@ -95,7 +100,7 @@ describe("createSaga", () => {
     it("still returns the saga when the debit command is not confirmed, so the timeout check can resolve it", async () => {
         mockPublish.mockRejectedValue(new Error("broker did not confirm"));
 
-        const saga = await SagaManager.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
+        const { saga } = await SagaManager.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
 
         expect(saga.status).toBe(SagaStatus.PENDING);
         expect(mockCreate).toHaveBeenCalledTimes(1);

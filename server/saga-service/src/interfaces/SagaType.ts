@@ -12,6 +12,7 @@ export interface Saga {
     receiverId: string;
     amount: number;
     status: SagaStatus;
+    idempotencyKey?: string;
 }
 
 export type SagaWithoutIdAndStatus = Omit<Saga, "sagaId" | "status">;

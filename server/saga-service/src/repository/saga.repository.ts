@@ -43,4 +43,12 @@ export class SagaRepository {
             .select(EXCLUDED_FIELDS)
             .exec() as Promise<Saga | null>;
     };
+
+    static findByIdempotencyKey = async (senderId: string, idempotencyKey: string): Promise<Saga | null> => {
+        return sagaModel
+            .findOne({ senderId, idempotencyKey })
+            .lean()
+            .select(EXCLUDED_FIELDS)
+            .exec() as Promise<Saga | null>;
+    };
 }

@@ -146,3 +146,37 @@ describe("SagaRepository.refreshUpdatedAt", () => {
         expect(Date.now() - new Date(stored?.updatedAt).getTime()).toBeGreaterThan(30_000);
     });
 });
+
+describe("idempotency key index", () => {
+    const KEY = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
+    const base = { receiverId: "987654321", amount: 100, status: SagaStatus.PENDING };
+
+    it("rejects a second saga with the same key from the same sender", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111", idempotencyKey: KEY });
+
+        await expect(
+            SagaRepository.create({ ...base, sagaId: "s-2", senderId: "111111111", idempotencyKey: KEY })
+        ).rejects.toMatchObject({ code: 11000 });
+    });
+
+    it("allows the same key for different senders", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111", idempotencyKey: KEY });
+
+        await expect(
+            SagaRepository.create({ ...base, sagaId: "s-2", senderId: "222222222", idempotencyKey: KEY })
+        ).resolves.toBeDefined();
+    });
+
+    it("allows any number of sagas without a key from the same sender", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111" });
+
+        await expect(SagaRepository.create({ ...base, sagaId: "s-2", senderId: "111111111" })).resolves.toBeDefined();
+    });
+
+    it("finds a saga by sender and key, and not by another sender", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111", idempotencyKey: KEY });
+
+        expect((await SagaRepository.findByIdempotencyKey("111111111", KEY))?.sagaId).toBe("s-1");
+        expect(await SagaRepository.findByIdempotencyKey("222222222", KEY)).toBeNull();
+    });
+});
