@@ -3,6 +3,7 @@ import database from "./config/db.js";
 import { config } from "./config/env.js";
 import { closeServer, registerGracefulShutdown } from "./utils/gracefulShutdown.js";
 import { logger } from "./utils/logger.js";
+import { errorMessage } from "./utils/errorMessage.js";
 
 try {
     await database.connect();
@@ -14,6 +15,6 @@ try {
         { name: "Database", run: () => database.disconnect() },
     ]);
 } catch (error) {
-    logger.error(`Error starting server: ${error}`);
+    logger.error("Error starting server", { error: errorMessage(error) });
     process.exit(1);
 }

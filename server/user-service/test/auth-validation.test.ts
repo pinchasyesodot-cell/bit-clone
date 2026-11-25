@@ -23,13 +23,13 @@ describe("validation messages reach the client", () => {
     ])("POST /api/users with %s answers 400 with the reason", async (_label, body, reason) => {
         const res = await request(server).post("/api/users").send(body);
         expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(reason);
+        expect((res.body as { error: string }).error).toMatch(reason);
     });
 
     it("POST /api/users/login with an empty body answers 400 with the reason", async () => {
         const res = await request(server).post("/api/users/login").send({});
         expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(/userName/);
+        expect((res.body as { error: string }).error).toMatch(/userName/);
     });
 });
 
