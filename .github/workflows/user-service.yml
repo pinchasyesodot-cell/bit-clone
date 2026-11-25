@@ -41,14 +41,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
-    env:
-      NODE_ENV: test
-      PORT: 4001
-      # the database name must end with -test, the user suite refuses to run otherwise
-      MONGO_URI: mongodb://localhost:27017/user-service-test?directConnection=true
-      JWT_SECRET: ci-test-secret
-      URL_CLIENT: http://localhost:3000
-
     steps:
       - uses: actions/checkout@v7
 

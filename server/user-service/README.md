@@ -36,7 +36,6 @@ npm run dev
 Tests (need MongoDB):
 
 ```
-cp .env.test.example .env.test
 npm run test:ci
 ```
 
