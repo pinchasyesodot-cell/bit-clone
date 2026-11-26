@@ -29,7 +29,7 @@ describe("validation messages reach the client", () => {
     it("POST /api/users/login with an empty body answers 400 with the reason", async () => {
         const res = await request(server).post("/api/users/login").send({});
         expect(res.status).toBe(400);
-        expect((res.body as { error: string }).error).toMatch(/userName/);
+        expect((res.body as { error: string }).error).toMatch(/userId/);
     });
 });
 

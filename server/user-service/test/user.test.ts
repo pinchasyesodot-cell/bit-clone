@@ -126,7 +126,7 @@ describe("User API Endpoints", () => {
         it("returns 200 and a token in the Authorization header", async () => {
             const res = await request(server)
                 .post("/api/users/login")
-                .send({ userName: testUser.userName, password: testUser.password });
+                .send({ userId: testUser.userId, password: testUser.password });
 
             expect(res.status).toBe(200);
             expect(res.headers.authorization).toMatch(/^Bearer .+/);
@@ -139,14 +139,31 @@ describe("User API Endpoints", () => {
         it("returns 401 on wrong password", async () => {
             const res = await request(server)
                 .post("/api/users/login")
-                .send({ userName: testUser.userName, password: "wrong-password" });
+                .send({ userId: testUser.userId, password: "wrong-password" });
             expect(res.status).toBe(401);
+        });
+
+        it("lets two users with the same name each log in with their own ID", async () => {
+            const namesake = { ...testUser, userId: 987654321, password: "Other5678!" };
+            expect((await request(server).post("/api/users").send(namesake)).status).toBe(201);
+
+            const first = await request(server)
+                .post("/api/users/login")
+                .send({ userId: testUser.userId, password: testUser.password });
+            const second = await request(server)
+                .post("/api/users/login")
+                .send({ userId: namesake.userId, password: namesake.password });
+
+            expect(first.status).toBe(200);
+            expect(first.body).toEqual({ userId: testUser.userId, userName: testUser.userName });
+            expect(second.status).toBe(200);
+            expect(second.body).toEqual({ userId: namesake.userId, userName: testUser.userName });
         });
 
         it("fails for a user that does not exist", async () => {
             const res = await request(server)
                 .post("/api/users/login")
-                .send({ userName: "nobody-here", password: "Test1234!" });
+                .send({ userId: 999999998, password: "Test1234!" });
             expect([401, 404]).toContain(res.status);
         });
 
@@ -155,9 +172,9 @@ describe("User API Endpoints", () => {
             expect(res.status).toBe(400);
         });
 
-        it.each(["userName", "password"])("returns 400 when %s is missing", async (field) => {
+        it.each(["userId", "password"])("returns 400 when %s is missing", async (field) => {
             const body: Record<string, unknown> = {
-                userName: testUser.userName,
+                userId: testUser.userId,
                 password: testUser.password,
             };
             delete body[field];

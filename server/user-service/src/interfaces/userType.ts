@@ -6,4 +6,4 @@ export interface User {
 
 export type UserWithoutPassword = Omit<User, "password">;
 
-export type UserLogin = Omit<User, "userId">;
+export type UserLogin = Omit<User, "userName">;

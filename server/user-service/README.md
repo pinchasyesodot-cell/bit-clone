@@ -7,7 +7,7 @@ Registers users, logs them in and issues the JWT that the other services trust.
 | Method | Path                 | Auth         | Body                                                          | Success                                                                                             |
 | ------ | -------------------- | ------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | POST   | `/api/users`         | none         | `{ userId (9 digits), userName, password (6-72 characters) }` | `201` with the user                                                                                 |
-| POST   | `/api/users/login`   | none         | `{ userName, password }`                                      | `200` with `{ userId, userName }` and the header `Authorization: Bearer <token>` (valid for 1 hour) |
+| POST   | `/api/users/login`   | none         | `{ userId, password }`                                        | `200` with `{ userId, userName }` and the header `Authorization: Bearer <token>` (valid for 1 hour) |
 | GET    | `/api/users/profile` | Bearer token | none                                                          | `200` with the user                                                                                 |
 | GET    | `/health`            | none         | none                                                          | `200`, or `503` when the database is down                                                           |
 

@@ -15,7 +15,7 @@ export class UserService {
     };
 
     static login = async (user: UserLogin): Promise<UserWithoutPassword & { token: string }> => {
-        const userData = await UserRepository.getUserByName(user.userName);
+        const userData = await UserRepository.getUserLogin(user.userId);
         const isMatch = await Hash.comparePassword(user.password, userData?.password ?? dummyHashString);
         if (!userData || !isMatch) throw new AppError("Invalid credentials", 401);
         const { password, ...result } = userData;
