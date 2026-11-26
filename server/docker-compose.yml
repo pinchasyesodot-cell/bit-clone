@@ -1,0 +1,124 @@
+services:
+  # ==============================
+  # API Gateway / Reverse Proxy
+  # ==============================
+
+  nginx:
+    image: nginx:1.30-alpine
+    container_name: nginx_server
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - account-service
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==============================
+  # Shared Infrastructure
+  # ==============================
+
+  rabbitmq:
+    image: rabbitmq:4.4-management-alpine
+    hostname: rabbitmq
+    restart: unless-stopped
+    container_name: rabbitmq-broker
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    env_file:
+      - ./rabbitmq/.env
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==============================
+  # User Service Ecosystem
+  # ==============================
+
+  # ==============================
+  # Saga Orchestrator Ecosystem
+  # ==============================
+
+  # ==============================
+  # Account Orchestrator Ecosystem
+  # ==============================
+
+  account-db:
+    image: mongo:7
+    restart: unless-stopped
+    command: ["--replSet", "rs0", "--bind_ip_all", "--quiet"]
+    container_name: db-account
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - account-db-data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mongosh",
+          "--quiet",
+          "--eval",
+          "try { rs.status().ok } catch (e) { rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'localhost:27017' }] }).ok }",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  account-service:
+    build:
+      context: ./account-service
+    container_name: account-service
+    restart: unless-stopped
+    env_file:
+      - ./account-service/.env.docker
+    ports:
+      - "127.0.0.1:4010:4010"
+    stop_grace_period: 15s
+    depends_on:
+      account-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:' + process.env.PORT + '/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  account-db-data:
+  rabbitmq-data:
