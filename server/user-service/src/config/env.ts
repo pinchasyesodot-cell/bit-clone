@@ -1,7 +1,5 @@
-import dotenv from "dotenv";
+import "dotenv/config";
 import env from "env-var";
-
-dotenv.config({ path: process.env.NODE_ENV === "test" ? ".env.test" : ".env" });
 
 export const config = {
     PORT: env.get("PORT").required().asPortNumber(),
@@ -9,4 +7,5 @@ export const config = {
     MONGO_URI: env.get("MONGO_URI").required().asString(),
     JWT_SECRET: env.get("JWT_SECRET").required().asString(),
     URL_CLIENT: env.get("URL_CLIENT").required().asUrlObject().origin,
+    RABBITMQ_URI: env.get("RABBITMQ_URI").required().asString(),
 };

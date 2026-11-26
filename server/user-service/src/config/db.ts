@@ -1,7 +1,6 @@
 import { connect } from "mongoose";
 import { config } from "./env.js";
 import { logger } from "../utils/logger.js";
-import { AppError } from "../utils/AppError.js";
 import mongoose from "mongoose";
 
 class Database {
@@ -13,21 +12,20 @@ class Database {
             });
             logger.info("Connected to MongoDB successfully");
         } catch (error) {
-            logger.error("Failed to connect to MongoDB:", { cause: error });
-            throw new AppError(`Failed to connect to MongoDB: ${error}`, 500);
+            throw new Error("Failed to connect to MongoDB", { cause: error });
         }
     };
 
     public isConnected = (): boolean => {
-        return mongoose.connection.readyState === 1;
+        return mongoose.connection.readyState === mongoose.ConnectionStates.connected;
     };
 
     public disconnect = async (): Promise<void> => {
         try {
             await mongoose.disconnect();
-            logger.info("MongoDB disconnected successfully.");
+            logger.info("Disconnected from MongoDB successfully");
         } catch (error) {
-            logger.error("Error disconnecting from MongoDB", { cause: error });
+            throw new Error("Failed to disconnect from MongoDB", { cause: error });
         }
     };
 }

@@ -1,29 +1,42 @@
+import { jest } from "@jest/globals";
 import request from "supertest";
 import jwt from "jsonwebtoken";
-import server from "../src/server.js";
-import database from "../src/config/db.js";
-import { userModel } from "../src/models/User.js";
-import { config } from "../src/config/env.js";
+import mongoose from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
+import type { UserCreatedEvent } from "../src/interfaces/userType.js";
+
+// The broker is replaced: these tests check what user-service sends, not RabbitMQ itself.
+const mockPublish = jest.fn<(queue: string, message: UserCreatedEvent) => Promise<void>>();
+jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
+    rabbitMQConfig: { publishMessage: mockPublish },
+}));
+
+const { default: server } = await import("../src/server.js");
+const { userModel } = await import("../src/models/User.js");
+const { config } = await import("../src/config/env.js");
+
+// The first run downloads the MongoDB binary, which can take a while.
+jest.setTimeout(120_000);
 
 const testUser = { userId: 123456789, userName: "testUser", password: "Test1234!" };
-const usedIds = [testUser.userId, 100000000, 999999999, 111111111, 987654321];
 
-const assertTestDatabase = (): void => {
-    if (!new URL(config.MONGO_URI).pathname.endsWith("-test")) {
-        throw new Error("Refusing to run: MONGO_URI must point to a database whose name ends with -test");
-    }
-};
-assertTestDatabase();
+let mongod: MongoMemoryServer;
 
 describe("User API Endpoints", () => {
+    beforeEach(() => {
+        mockPublish.mockReset();
+        mockPublish.mockResolvedValue(undefined);
+    });
+
+    // Every run gets its own empty MongoDB on a free port, deleted when the run ends.
     beforeAll(async () => {
-        await database.connect();
-        await userModel.deleteMany({ userId: { $in: usedIds } });
+        mongod = await MongoMemoryServer.create();
+        await mongoose.connect(mongod.getUri());
     });
 
     afterAll(async () => {
-        await userModel.deleteMany({ userId: { $in: usedIds } });
-        await database.disconnect();
+        await mongoose.disconnect();
+        await mongod.stop();
     });
 
     // ---------------------------------------------------------------
@@ -39,6 +52,41 @@ describe("User API Endpoints", () => {
         it("returns 409 status on duplicate userId", async () => {
             const response = await request(server).post("/api/users/").send(testUser);
             expect(response.status).toBe(409);
+        });
+
+        it("announces the new user to account-service with the ID as a 9-digit string", async () => {
+            const res = await request(server)
+                .post("/api/users")
+                .send({ userId: 100000000, userName: "announced", password: "Test1234!" });
+
+            expect(res.status).toBe(201);
+            expect(mockPublish).toHaveBeenCalledTimes(1);
+            expect(mockPublish).toHaveBeenCalledWith("user_created_queue", {
+                type: "USER_CREATED",
+                payload: { userId: "100000000" },
+            });
+            await userModel.deleteOne({ userId: 100000000 });
+        });
+
+        it("removes the user and fails when the broker does not confirm the event, so the signup can be retried", async () => {
+            const newcomer = { userId: 999999999, userName: "unlucky", password: "Test1234!" };
+            mockPublish.mockRejectedValueOnce(new Error("broker down"));
+
+            const failed = await request(server).post("/api/users").send(newcomer);
+
+            expect(failed.status).toBe(500);
+            expect(failed.body).toEqual({ error: "Internal Server Error" });
+            expect(await userModel.exists({ userId: newcomer.userId })).toBeNull();
+
+            const retried = await request(server).post("/api/users").send(newcomer);
+            expect(retried.status).toBe(201);
+            await userModel.deleteOne({ userId: newcomer.userId });
+        });
+
+        it("does not announce a user that was not created", async () => {
+            const res = await request(server).post("/api/users/").send(testUser);
+            expect(res.status).toBe(409);
+            expect(mockPublish).not.toHaveBeenCalled();
         });
 
         it("returns 400 status on empty body", async () => {
@@ -126,10 +174,12 @@ describe("User API Endpoints", () => {
         it("returns 200 and a token in the Authorization header", async () => {
             const res = await request(server)
                 .post("/api/users/login")
-                .send({ userName: testUser.userName, password: testUser.password });
+                .send({ userId: testUser.userId, password: testUser.password });
 
             expect(res.status).toBe(200);
             expect(res.headers.authorization).toMatch(/^Bearer .+/);
+            const token = res.get("Authorization")?.split(" ")[1] ?? "";
+            expect(jwt.decode(token, { complete: true })?.header.alg).toBe("HS256");
             expect(res.body).toHaveProperty("userId", testUser.userId);
             expect(res.body).toHaveProperty("userName", testUser.userName);
         });
@@ -137,14 +187,46 @@ describe("User API Endpoints", () => {
         it("returns 401 on wrong password", async () => {
             const res = await request(server)
                 .post("/api/users/login")
-                .send({ userName: testUser.userName, password: "wrong-password" });
+                .send({ userId: testUser.userId, password: "wrong-password" });
             expect(res.status).toBe(401);
+        });
+
+        it("lets two users with the same name each log in with their own ID", async () => {
+            const namesake = { ...testUser, userId: 987654321, password: "Other5678!" };
+            expect((await request(server).post("/api/users").send(namesake)).status).toBe(201);
+
+            const first = await request(server)
+                .post("/api/users/login")
+                .send({ userId: testUser.userId, password: testUser.password });
+            const second = await request(server)
+                .post("/api/users/login")
+                .send({ userId: namesake.userId, password: namesake.password });
+
+            expect(first.status).toBe(200);
+            expect(first.body).toEqual({ userId: testUser.userId, userName: testUser.userName });
+            expect(second.status).toBe(200);
+            expect(second.body).toEqual({ userId: namesake.userId, userName: testUser.userName });
+        });
+
+        it("keeps the spaces in a password exactly as typed", async () => {
+            const spaced = { userId: 111111111, userName: "spaced", password: "  pass word  " };
+            expect((await request(server).post("/api/users").send(spaced)).status).toBe(201);
+
+            const exact = await request(server)
+                .post("/api/users/login")
+                .send({ userId: spaced.userId, password: spaced.password });
+            const trimmed = await request(server)
+                .post("/api/users/login")
+                .send({ userId: spaced.userId, password: "pass word" });
+
+            expect(exact.status).toBe(200);
+            expect(trimmed.status).toBe(401);
         });
 
         it("fails for a user that does not exist", async () => {
             const res = await request(server)
                 .post("/api/users/login")
-                .send({ userName: "nobody-here", password: "Test1234!" });
+                .send({ userId: 999999998, password: "Test1234!" });
             expect([401, 404]).toContain(res.status);
         });
 
@@ -153,9 +235,9 @@ describe("User API Endpoints", () => {
             expect(res.status).toBe(400);
         });
 
-        it.each(["userName", "password"])("returns 400 when %s is missing", async (field) => {
+        it.each(["userId", "password"])("returns 400 when %s is missing", async (field) => {
             const body: Record<string, unknown> = {
-                userName: testUser.userName,
+                userId: testUser.userId,
                 password: testUser.password,
             };
             delete body[field];

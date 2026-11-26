@@ -17,6 +17,35 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+  # ==============================
+  # Shared Infrastructure
+  # ==============================
+
+  rabbitmq:
+    image: rabbitmq:4.4-management-alpine
+    hostname: rabbitmq
+    restart: unless-stopped
+    container_name: rabbitmq-broker
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    env_file:
+      - ./rabbitmq/.env
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ==============================
   # User service
   # ==============================
@@ -25,7 +54,7 @@ services:
     restart: unless-stopped
     container_name: db-user-service
     ports:
-      - "127.0.0.1:27017:27017"
+      - "127.0.0.1:27018:27017"
     volumes:
       - user-db-data:/data/db
     healthcheck:
@@ -52,6 +81,8 @@ services:
     depends_on:
       user-db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
@@ -72,3 +103,4 @@ services:
 
 volumes:
   user-db-data:
+  rabbitmq-data:

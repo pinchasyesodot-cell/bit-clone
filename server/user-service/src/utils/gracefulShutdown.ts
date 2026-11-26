@@ -1,5 +1,6 @@
 import type { Server } from "node:http";
 import { logger } from "./logger.js";
+import { errorMessage } from "./errorMessage.js";
 
 type ShutdownStep = { name: string; run: () => Promise<void> };
 
@@ -34,7 +35,7 @@ export const registerGracefulShutdown = (steps: ShutdownStep[], timeoutMs = 10_0
             process.exit(exitCode);
         } catch (error) {
             clearTimeout(forceExit);
-            logger.error(`Error during shutdown: ${error}`);
+            logger.error("Error during shutdown", { error: errorMessage(error) });
             process.exit(1);
         }
     };
@@ -42,10 +43,10 @@ export const registerGracefulShutdown = (steps: ShutdownStep[], timeoutMs = 10_0
     process.on("SIGINT", () => void shutdown("SIGINT"));
     process.on("uncaughtException", (err) => {
         logger.error(`Uncaught Exception: ${err.message}`);
-        shutdown("uncaughtException", 1);
+        void shutdown("uncaughtException", 1);
     });
     process.on("unhandledRejection", (reason) => {
-        logger.error(`Unhandled Rejection: ${reason}`);
-        shutdown("unhandledRejection", 1);
+        logger.error("Unhandled Rejection", { reason: errorMessage(reason) });
+        void shutdown("unhandledRejection", 1);
     });
 };

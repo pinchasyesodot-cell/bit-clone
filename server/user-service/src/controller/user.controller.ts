@@ -5,13 +5,13 @@ import { wrapAsync } from "../utils/wrapAsync.js";
 
 export class UserController {
     static createUser = wrapAsync(async (req: Request, res: Response): Promise<void> => {
-        const userData: User = req.body;
+        const userData = req.body as User;
         const newUser = await UserService.createUser(userData);
         res.status(201).json(newUser);
     });
 
     static login = wrapAsync(async (req: Request, res: Response): Promise<void> => {
-        const userData: UserLogin = req.body;
+        const userData = req.body as UserLogin;
         const loginResult = await UserService.login(userData);
         res.setHeader("Authorization", `Bearer ${loginResult.token}`);
         res.status(200).json({ userId: loginResult.userId, userName: loginResult.userName });

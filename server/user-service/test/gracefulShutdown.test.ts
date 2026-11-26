@@ -61,7 +61,7 @@ const until = async (condition: () => boolean): Promise<void> => {
 describe("registerGracefulShutdown", () => {
     const stashed = EVENTS.map((event) => [event, listenersOf(event)] as const);
     const calls: string[] = [];
-    const step = (name: string, run: () => Promise<void> = async () => undefined) => ({
+    const step = (name: string, run: () => Promise<void> = () => Promise.resolve()) => ({
         name,
         run: async () => {
             calls.push(`${name} starts`);
@@ -118,9 +118,7 @@ describe("registerGracefulShutdown", () => {
     it("exits with 1 when a step fails, and does not run the steps after it", async () => {
         registerGracefulShutdown([
             step("first"),
-            step("broken", async () => {
-                throw new Error("cannot close");
-            }),
+            step("broken", () => Promise.reject(new Error("cannot close"))),
             step("never"),
         ]);
 

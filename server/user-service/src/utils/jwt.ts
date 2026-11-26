@@ -1,20 +1,18 @@
 import jwt from "jsonwebtoken";
-import { logger } from "./logger.js";
-import { AppError } from "./AppError.js";
+
+const ALGORITHM = "HS256";
 
 export class JWT {
-    static generateToken(payload: object, secret: jwt.Secret, expiresIn: string | number): string {
-        const token = jwt.sign(payload, secret, { expiresIn } as jwt.SignOptions);
+    static generateToken(
+        payload: object,
+        secret: jwt.Secret,
+        expiresIn: NonNullable<jwt.SignOptions["expiresIn"]>
+    ): string {
+        const token = jwt.sign(payload, secret, { algorithm: ALGORITHM, expiresIn });
         return token;
     }
 
     static verifyToken(token: string, secret: jwt.Secret): jwt.JwtPayload | string {
-        try {
-            const decoded = jwt.verify(token, secret);
-            return decoded;
-        } catch (error) {
-            logger.error("JWT verification failed:", error);
-            throw new AppError("Invalid token", 401);
-        }
+        return jwt.verify(token, secret, { algorithms: [ALGORITHM] });
     }
 }

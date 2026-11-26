@@ -4,6 +4,7 @@ logs
 test
 .git
 .env*
-.eslintrc
+eslint.config.js
 .gitignore
 .prettierrc
+jest.config.ts

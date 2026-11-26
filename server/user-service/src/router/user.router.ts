@@ -2,7 +2,7 @@ import { Router } from "express";
 import { UserController } from "../controller/user.controller.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { loginValidationSchema, userValidationSchema } from "../validations/user.validation.js";
-import { validateToken } from "../validations/token.validation.js";
+import { validateToken } from "../middlewares/validateToken.js";
 
 class UserRouter {
     public router: Router;
