@@ -10,7 +10,7 @@ export const userSchema = new Schema<User>(
             maxlength: 9,
         },
         userName: { type: String, required: true, trim: true },
-        password: { type: String, required: true, trim: true, minlength: 6, select: false },
+        password: { type: String, required: true, select: false },
     },
     {
         timestamps: true,

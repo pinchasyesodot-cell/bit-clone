@@ -160,6 +160,21 @@ describe("User API Endpoints", () => {
             expect(second.body).toEqual({ userId: namesake.userId, userName: testUser.userName });
         });
 
+        it("keeps the spaces in a password exactly as typed", async () => {
+            const spaced = { userId: 111111111, userName: "spaced", password: "  pass word  " };
+            expect((await request(server).post("/api/users").send(spaced)).status).toBe(201);
+
+            const exact = await request(server)
+                .post("/api/users/login")
+                .send({ userId: spaced.userId, password: spaced.password });
+            const trimmed = await request(server)
+                .post("/api/users/login")
+                .send({ userId: spaced.userId, password: "pass word" });
+
+            expect(exact.status).toBe(200);
+            expect(trimmed.status).toBe(401);
+        });
+
         it("fails for a user that does not exist", async () => {
             const res = await request(server)
                 .post("/api/users/login")

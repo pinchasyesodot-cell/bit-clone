@@ -17,6 +17,7 @@ describe("validation messages reach the client", () => {
     it.each([
         ["a userId that is too short", { ...validUser, userId: 5 }, /9 digits/],
         ["a password longer than 72 characters", { ...validUser, password: "a".repeat(73) }, /at most 72/],
+        ["a password in Hebrew letters", { ...validUser, password: "שלום123456" }, /only English letters/],
         ["a password shorter than 6 characters", { ...validUser, password: "12345" }, /at least 6/],
         ["an unknown field", { ...validUser, isAdmin: true }, /isAdmin/],
         ["a missing userName", { userId: validUser.userId, password: validUser.password }, /userName/],
