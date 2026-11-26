@@ -35,19 +35,31 @@ describe("validation messages reach the client", () => {
 
 describe("GET /api/users/profile rejects bad credentials before touching the database", () => {
     it.each([
-        ["no Authorization header", undefined],
-        ["a token without the Bearer prefix", sign({ userId: validUser.userId })],
-        ["a different scheme (Basic)", `Basic ${sign({ userId: validUser.userId })}`],
-        ["garbage instead of a token", "Bearer not-a-real-token"],
-        ["a token signed with another secret", `Bearer ${sign({ userId: validUser.userId }, "another-secret")}`],
-        ["an expired token", `Bearer ${sign({ userId: validUser.userId }, config.JWT_SECRET, { expiresIn: -10 })}`],
-        ["a valid token without a userId", `Bearer ${sign({ userName: "dana" })}`],
-        ["a valid token whose userId is not a number", `Bearer ${sign({ userId: "abc" })}`],
-        ["a valid token whose userId is not an integer", `Bearer ${sign({ userId: 1.5 })}`],
-    ])("answers 401 for %s", async (_label, authorization) => {
+        ["no Authorization header", undefined, "Missing token"],
+        ["a token without the Bearer prefix", sign({ userId: validUser.userId }), "Invalid token"],
+        ["a different scheme (Basic)", `Basic ${sign({ userId: validUser.userId })}`, "Invalid token"],
+        ["garbage instead of a token", "Bearer not-a-real-token", "Unauthorized: Invalid token"],
+        [
+            "a token signed with another secret",
+            `Bearer ${sign({ userId: validUser.userId }, "another-secret")}`,
+            "Unauthorized: Invalid token",
+        ],
+        [
+            "a token signed with another algorithm",
+            `Bearer ${sign({ userId: validUser.userId }, config.JWT_SECRET, { algorithm: "HS512" })}`,
+            "Unauthorized: Invalid token",
+        ],
+        [
+            "an expired token",
+            `Bearer ${sign({ userId: validUser.userId }, config.JWT_SECRET, { expiresIn: -10 })}`,
+            "Unauthorized: Token expired",
+        ],
+        ["a valid token without a userId", `Bearer ${sign({ userName: "dana" })}`, "Invalid token"],
+        ["a valid token whose userId is not a number", `Bearer ${sign({ userId: "abc" })}`, "Invalid token"],
+        ["a valid token whose userId is not an integer", `Bearer ${sign({ userId: 1.5 })}`, "Invalid token"],
+    ])("answers 401 for %s, says why and nothing more", async (_label, authorization, error) => {
         const res = await getProfile(authorization);
         expect(res.status).toBe(401);
-        expect(res.body).toHaveProperty("error");
-        expect(res.body).not.toHaveProperty("message");
+        expect(res.body).toEqual({ error });
     });
 });

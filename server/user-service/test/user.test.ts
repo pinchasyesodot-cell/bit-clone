@@ -130,6 +130,8 @@ describe("User API Endpoints", () => {
 
             expect(res.status).toBe(200);
             expect(res.headers.authorization).toMatch(/^Bearer .+/);
+            const token = res.get("Authorization")?.split(" ")[1] ?? "";
+            expect(jwt.decode(token, { complete: true })?.header.alg).toBe("HS256");
             expect(res.body).toHaveProperty("userId", testUser.userId);
             expect(res.body).toHaveProperty("userName", testUser.userName);
         });
