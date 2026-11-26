@@ -1,6 +1,8 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
 import type { UserCreatedEvent } from "../src/interfaces/userType.js";
 
 // The broker is replaced: these tests check what user-service sends, not RabbitMQ itself.
@@ -10,19 +12,15 @@ jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
 }));
 
 const { default: server } = await import("../src/server.js");
-const { default: database } = await import("../src/config/db.js");
 const { userModel } = await import("../src/models/User.js");
 const { config } = await import("../src/config/env.js");
 
-const testUser = { userId: 123456789, userName: "testUser", password: "Test1234!" };
-const usedIds = [testUser.userId, 100000000, 999999999, 111111111, 987654321];
+// The first run downloads the MongoDB binary, which can take a while.
+jest.setTimeout(120_000);
 
-const assertTestDatabase = (): void => {
-    if (!new URL(config.MONGO_URI).pathname.endsWith("-test")) {
-        throw new Error("Refusing to run: MONGO_URI must point to a database whose name ends with -test");
-    }
-};
-assertTestDatabase();
+const testUser = { userId: 123456789, userName: "testUser", password: "Test1234!" };
+
+let mongod: MongoMemoryServer;
 
 describe("User API Endpoints", () => {
     beforeEach(() => {
@@ -30,14 +28,15 @@ describe("User API Endpoints", () => {
         mockPublish.mockResolvedValue(undefined);
     });
 
+    // Every run gets its own empty MongoDB on a free port, deleted when the run ends.
     beforeAll(async () => {
-        await database.connect();
-        await userModel.deleteMany({ userId: { $in: usedIds } });
+        mongod = await MongoMemoryServer.create();
+        await mongoose.connect(mongod.getUri());
     });
 
     afterAll(async () => {
-        await userModel.deleteMany({ userId: { $in: usedIds } });
-        await database.disconnect();
+        await mongoose.disconnect();
+        await mongod.stop();
     });
 
     // ---------------------------------------------------------------

@@ -46,13 +46,11 @@ npm ci
 npm run dev
 ```
 
-Tests (need MongoDB; RabbitMQ is replaced by a fake):
+Tests (no database or broker needed: MongoDB runs in memory, RabbitMQ is faked):
 
 ```
 npm run test:ci
 ```
-
-The user suite deletes users by id, so it refuses to run unless the database name ends with `-test`.
 
 Docker, from the `server` folder:
 
