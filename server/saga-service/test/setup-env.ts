@@ -2,9 +2,11 @@
 // (and never use real secrets). dotenv does not override variables that already exist.
 process.env.NODE_ENV = "test";
 process.env.PORT = "4005";
-process.env.MONGO_URI = "mongodb://localhost:27017/saga-test";
+// Never connected to: saga.repository.test.ts starts its own MongoDB in memory. env.ts only needs a value.
+process.env.MONGO_URI = "mongodb://localhost:27017/unused";
 process.env.RABBITMQ_URI = "amqp://localhost";
 process.env.URL_ACCOUNTS = "http://localhost:4010/api/accounts";
 process.env.JWT_SECRET = "test-secret";
 process.env.URL_CLIENT = "http://localhost:3000";
 process.env.INTERNAL_API_KEY = "0123456789abcdefghejkqwertyuiopv";
+process.env.TRANSFER_RATE_LIMIT = "1000";

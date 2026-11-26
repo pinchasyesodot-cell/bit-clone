@@ -12,30 +12,64 @@ import { api } from "../api/base.api.js";
 import { logger } from "../utils/logger.js";
 import socketIo from "../service/socket.service.js";
 import { AppError } from "../utils/AppError.js";
+import { isDuplicateKey } from "../utils/mongoErrors.js";
+import { validateMessage } from "../validations/validateMessage.js";
+import { sagaResponseSchema } from "../validations/sagaResponse.validation.js";
+import { errorMessage } from "../utils/errorMessage.js";
 
 export class SagaManager {
     static isProcessing = false;
     static SAGA_TIMEOUT_MS = 10000;
     static REFUND_RETRY_MS = 10000;
 
-    static createSaga = async (saga: SagaWithoutIdAndStatus): Promise<Saga> => {
+    static createSaga = async (
+        saga: SagaWithoutIdAndStatus,
+        idempotencyKey?: string
+    ): Promise<{ saga: Saga; created: boolean }> => {
         if (saga.senderId === saga.receiverId) {
             throw new AppError("Cannot send money to yourself", 400);
         }
 
+        if (idempotencyKey) {
+            const existing = await SagaRepository.findByIdempotencyKey(saga.senderId, idempotencyKey);
+            if (existing) return this.replay(existing, saga);
+        }
+
         const sagaId = uuidv7();
         const status = SagaStatus.PENDING;
-        const newSaga = await SagaRepository.create({ ...saga, sagaId, status });
+        let newSaga: Saga;
+        try {
+            newSaga = await SagaRepository.create({
+                ...saga,
+                sagaId,
+                status,
+                ...(idempotencyKey && { idempotencyKey }),
+            });
+        } catch (error) {
+            if (idempotencyKey && isDuplicateKey(error, "idempotencyKey")) {
+                const existing = await SagaRepository.findByIdempotencyKey(saga.senderId, idempotencyKey);
+                if (existing) return this.replay(existing, saga);
+            }
+            throw error;
+        }
 
         try {
             await rabbitMQConfig.publishMessage("debit_queue", { type: "DEBIT_COMMAND", payload: newSaga });
         } catch (error) {
-            logger.error(
-                `Debit command of saga ${sagaId} was not confirmed, the timeout check will resolve it: ${error}`
-            );
+            logger.error("Debit command was not confirmed, the timeout check will resolve it", {
+                sagaId,
+                error: errorMessage(error),
+            });
         }
 
-        return newSaga;
+        return { saga: newSaga, created: true };
+    };
+
+    private static replay = (existing: Saga, request: SagaWithoutIdAndStatus): { saga: Saga; created: boolean } => {
+        if (existing.receiverId !== request.receiverId || existing.amount !== request.amount) {
+            throw new AppError("This Idempotency-Key was already used for a different transfer", 422);
+        }
+        return { saga: existing, created: false };
     };
 
     static handleTimeouts = async (): Promise<void> => {
@@ -50,13 +84,13 @@ export class SagaManager {
                 try {
                     await this.reconcile(saga);
                 } catch (error) {
-                    logger.error(`Timeout handling failed for saga ${saga.sagaId}: ${error}`);
+                    logger.error("Timeout handling failed", { sagaId: saga.sagaId, error: errorMessage(error) });
                 }
             }
 
             await this.resendUnconfirmedRefunds();
         } catch (error) {
-            logger.error(`General error in handleTimeouts: ${error}`);
+            logger.error("General error in handleTimeouts", { error: errorMessage(error) });
         } finally {
             this.isProcessing = false;
         }
@@ -72,7 +106,7 @@ export class SagaManager {
                 await rabbitMQConfig.publishMessage("refund_queue", { type: "REFUND_COMMAND", payload: saga });
                 await SagaRepository.refreshUpdatedAt(saga.sagaId, SagaStatus.COMPENSATING);
             } catch (error) {
-                logger.error(`Failed to resend refund command for saga ${saga.sagaId}: ${error}`);
+                logger.error("Failed to resend refund command", { sagaId: saga.sagaId, error: errorMessage(error) });
             }
         }
     };
@@ -108,7 +142,7 @@ export class SagaManager {
 
     static consumeSagaMessages = async (): Promise<void> => {
         await rabbitMQConfig.consumeMessages("saga_response_queue", async (msg) => {
-            const { type, payload } = msg;
+            const { type, payload } = validateMessage(sagaResponseSchema, msg);
             const { sagaId, success, error } = payload;
 
             switch (type) {
@@ -123,9 +157,6 @@ export class SagaManager {
                 case "REFUND_RESPONSE":
                     await this.handleRefundResponse(sagaId, success, error);
                     break;
-
-                default:
-                    logger.warn(`Unknown message type: ${type}`);
             }
         });
     };

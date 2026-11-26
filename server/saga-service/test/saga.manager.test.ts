@@ -6,6 +6,7 @@ import {
     type Saga,
     type SagaResponse,
 } from "../src/interfaces/SagaType.js";
+import { InvalidMessageError } from "../src/utils/InvalidMessageError.js";
 
 type ResponseHandler = (msg: SagaResponse) => Promise<void>;
 
@@ -45,9 +46,10 @@ const { SagaManager } = await import("../src/managers/saga.manager.js");
 
 const SENDER = "111111111";
 const OPEN = [SagaStatus.PENDING, SagaStatus.PROCESSING];
+const SAGA_ID = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 
 const makeSaga = (overrides: Partial<Saga> = {}): Saga => ({
-    sagaId: "saga-1",
+    sagaId: SAGA_ID,
     senderId: SENDER,
     receiverId: "222222222",
     amount: 100,
@@ -62,7 +64,7 @@ const accountsSays = (state: Partial<AccountsSagaState>) => ({
 const receive = async (
     type: SagaResponse["type"],
     success: boolean,
-    sagaId = "saga-1",
+    sagaId = SAGA_ID,
     error?: string
 ): Promise<void> => {
     await SagaManager.consumeSagaMessages();
@@ -75,17 +77,22 @@ beforeEach(() => {
     SagaManager.isProcessing = false;
     mockConsume.mockResolvedValue(undefined);
     mockPublish.mockResolvedValue(undefined);
-    mockCreate.mockImplementation(async (saga) => saga);
-    mockTransition.mockImplementation(async (sagaId, _from, to) => makeSaga({ sagaId, status: to }));
+    mockCreate.mockImplementation((saga) => Promise.resolve(saga));
+    mockTransition.mockImplementation((sagaId, _from, to) => Promise.resolve(makeSaga({ sagaId, status: to })));
     mockFindTimedOutOpenSagas.mockResolvedValue([]);
     mockFindUnconfirmedRefunds.mockResolvedValue([]);
-    mockRefreshUpdatedAt.mockImplementation(async (sagaId, status) => makeSaga({ sagaId, status }));
+    mockRefreshUpdatedAt.mockImplementation((sagaId, status) => Promise.resolve(makeSaga({ sagaId, status })));
 });
 
 describe("createSaga", () => {
     it("stores a PENDING saga and asks the accounts service to debit the sender", async () => {
-        const saga = await SagaManager.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
+        const { saga, created } = await SagaManager.createSaga({
+            senderId: SENDER,
+            receiverId: "222222222",
+            amount: 100,
+        });
 
+        expect(created).toBe(true);
         expect(saga.status).toBe(SagaStatus.PENDING);
         expect(saga.sagaId).toMatch(/^[0-9a-f-]{36}$/);
         expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ senderId: SENDER, status: "PENDING" }));
@@ -95,7 +102,7 @@ describe("createSaga", () => {
     it("still returns the saga when the debit command is not confirmed, so the timeout check can resolve it", async () => {
         mockPublish.mockRejectedValue(new Error("broker did not confirm"));
 
-        const saga = await SagaManager.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
+        const { saga } = await SagaManager.createSaga({ senderId: SENDER, receiverId: "222222222", amount: 100 });
 
         expect(saga.status).toBe(SagaStatus.PENDING);
         expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -121,7 +128,7 @@ describe("consuming replies: the happy path", () => {
     it("DEBIT ok: moves to PROCESSING, asks to credit the receiver, tells the user", async () => {
         await receive("DEBIT_RESPONSE", true);
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", [SagaStatus.PENDING], SagaStatus.PROCESSING);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, [SagaStatus.PENDING], SagaStatus.PROCESSING);
         const processing = makeSaga({ status: SagaStatus.PROCESSING });
         expect(mockPublish).toHaveBeenCalledWith("credit_queue", { type: "CREDIT_COMMAND", payload: processing });
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:processing", processing);
@@ -131,7 +138,7 @@ describe("consuming replies: the happy path", () => {
         await receive("CREDIT_RESPONSE", true);
 
         expect(mockTransition).toHaveBeenCalledWith(
-            "saga-1",
+            SAGA_ID,
             [SagaStatus.PROCESSING, SagaStatus.COMPENSATING],
             SagaStatus.COMPLETED
         );
@@ -144,7 +151,7 @@ describe("consuming replies: failures and the refund flow", () => {
     it("DEBIT failed: marks the saga FAILED and never asks to credit anyone", async () => {
         await receive("DEBIT_RESPONSE", false);
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", [SagaStatus.PENDING], SagaStatus.FAILED);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, [SagaStatus.PENDING], SagaStatus.FAILED);
         expect(mockPublish).not.toHaveBeenCalled();
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:failed", makeSaga({ status: SagaStatus.FAILED }));
     });
@@ -152,7 +159,7 @@ describe("consuming replies: failures and the refund flow", () => {
     it("CREDIT failed: moves to COMPENSATING and sends a REFUND_COMMAND to give the sender the money back", async () => {
         await receive("CREDIT_RESPONSE", false);
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", [SagaStatus.PROCESSING], SagaStatus.COMPENSATING);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, [SagaStatus.PROCESSING], SagaStatus.COMPENSATING);
         const compensating = makeSaga({ status: SagaStatus.COMPENSATING });
         expect(mockPublish).toHaveBeenCalledWith("refund_queue", { type: "REFUND_COMMAND", payload: compensating });
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:compensating", compensating);
@@ -161,19 +168,19 @@ describe("consuming replies: failures and the refund flow", () => {
     it("REFUND ok: the saga ends FAILED (money is back with the sender)", async () => {
         await receive("REFUND_RESPONSE", true);
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", [SagaStatus.COMPENSATING], SagaStatus.FAILED);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, [SagaStatus.COMPENSATING], SagaStatus.FAILED);
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:failed", makeSaga({ status: SagaStatus.FAILED }));
     });
 
     it("REFUND refused because the receiver was already credited: the transfer is COMPLETED", async () => {
-        await receive("REFUND_RESPONSE", false, "saga-1", ALREADY_CREDITED);
+        await receive("REFUND_RESPONSE", false, SAGA_ID, ALREADY_CREDITED);
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", [SagaStatus.COMPENSATING], SagaStatus.COMPLETED);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, [SagaStatus.COMPENSATING], SagaStatus.COMPLETED);
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:completed", makeSaga({ status: SagaStatus.COMPLETED }));
     });
 
     it("REFUND refused for any other reason: changes nothing", async () => {
-        await receive("REFUND_RESPONSE", false, "saga-1", "ACCOUNT_LOCKED");
+        await receive("REFUND_RESPONSE", false, SAGA_ID, "ACCOUNT_LOCKED");
 
         expect(mockTransition).not.toHaveBeenCalled();
         expect(mockEmit).not.toHaveBeenCalled();
@@ -186,13 +193,13 @@ describe("consuming replies: failures and the refund flow", () => {
         expect(mockEmit).not.toHaveBeenCalled();
     });
 
-    it("ignores an unknown message type", async () => {
+    it("rejects an unknown message type, so it is dead-lettered instead of lost", async () => {
         await SagaManager.consumeSagaMessages();
         const handler = mockConsume.mock.calls[0]?.[1];
-        await handler?.({
-            type: "SOMETHING_ELSE" as SagaResponse["type"],
-            payload: { sagaId: "saga-1", success: true },
-        });
+
+        await expect(
+            handler?.({ type: "SOMETHING_ELSE" as SagaResponse["type"], payload: { sagaId: SAGA_ID, success: true } })
+        ).rejects.toBeInstanceOf(InvalidMessageError);
 
         expect(mockTransition).not.toHaveBeenCalled();
         expect(mockPublish).not.toHaveBeenCalled();
@@ -227,7 +234,7 @@ describe("consuming replies: stale or duplicate messages are ignored", () => {
     });
 
     it("a late already-credited refund answer is ignored", async () => {
-        await receive("REFUND_RESPONSE", false, "saga-1", ALREADY_CREDITED);
+        await receive("REFUND_RESPONSE", false, SAGA_ID, ALREADY_CREDITED);
         expect(mockEmit).not.toHaveBeenCalled();
     });
 
@@ -259,8 +266,8 @@ describe("handleTimeouts (a service did not reply within 10 seconds)", () => {
 
         await SagaManager.handleTimeouts();
 
-        expect(mockAccountsGet).toHaveBeenCalledWith("/sagas/saga-1");
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", OPEN, SagaStatus.COMPENSATING);
+        expect(mockAccountsGet).toHaveBeenCalledWith(`/sagas/${SAGA_ID}`);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, OPEN, SagaStatus.COMPENSATING);
         const compensating = makeSaga({ status: SagaStatus.COMPENSATING });
         expect(mockPublish).toHaveBeenCalledWith("refund_queue", { type: "REFUND_COMMAND", payload: compensating });
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:compensating", compensating);
@@ -272,7 +279,7 @@ describe("handleTimeouts (a service did not reply within 10 seconds)", () => {
 
         await SagaManager.handleTimeouts();
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", OPEN, SagaStatus.COMPLETED);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, OPEN, SagaStatus.COMPLETED);
         expect(mockEmit).toHaveBeenCalledWith(SENDER, "saga:completed", makeSaga({ status: SagaStatus.COMPLETED }));
         expect(mockPublish).not.toHaveBeenCalled();
     });
@@ -283,7 +290,7 @@ describe("handleTimeouts (a service did not reply within 10 seconds)", () => {
 
         await SagaManager.handleTimeouts();
 
-        expect(mockTransition).toHaveBeenCalledWith("saga-1", OPEN, SagaStatus.FAILED);
+        expect(mockTransition).toHaveBeenCalledWith(SAGA_ID, OPEN, SagaStatus.FAILED);
         expect(mockPublish).not.toHaveBeenCalled();
     });
 
@@ -299,7 +306,7 @@ describe("handleTimeouts (a service did not reply within 10 seconds)", () => {
     });
 
     it("keeps going with the other sagas when one of them fails", async () => {
-        mockFindTimedOutOpenSagas.mockResolvedValue([stuck({ sagaId: "saga-1" }), stuck({ sagaId: "saga-2" })]);
+        mockFindTimedOutOpenSagas.mockResolvedValue([stuck({ sagaId: SAGA_ID }), stuck({ sagaId: "saga-2" })]);
         mockAccountsGet
             .mockRejectedValueOnce(new Error("timeout of 5000ms exceeded"))
             .mockResolvedValueOnce(accountsSays({ debited: true }));
@@ -365,7 +372,7 @@ describe("refunds that were not answered (the saga stays COMPENSATING)", () => {
         await SagaManager.handleTimeouts();
 
         expect(mockPublish).toHaveBeenCalledWith("refund_queue", { type: "REFUND_COMMAND", payload: waiting() });
-        expect(mockRefreshUpdatedAt).toHaveBeenCalledWith("saga-1", SagaStatus.COMPENSATING);
+        expect(mockRefreshUpdatedAt).toHaveBeenCalledWith(SAGA_ID, SagaStatus.COMPENSATING);
         const publishedAt = mockPublish.mock.invocationCallOrder[0] ?? 0;
         const refreshedAt = mockRefreshUpdatedAt.mock.invocationCallOrder[0] ?? 0;
         expect(publishedAt).toBeLessThan(refreshedAt);
@@ -381,7 +388,7 @@ describe("refunds that were not answered (the saga stays COMPENSATING)", () => {
     });
 
     it("keeps going with the other refunds when one resend fails", async () => {
-        mockFindUnconfirmedRefunds.mockResolvedValue([waiting({ sagaId: "saga-1" }), waiting({ sagaId: "saga-2" })]);
+        mockFindUnconfirmedRefunds.mockResolvedValue([waiting({ sagaId: SAGA_ID }), waiting({ sagaId: "saga-2" })]);
         mockPublish.mockRejectedValueOnce(new Error("unconfirmed")).mockResolvedValueOnce(undefined);
 
         await SagaManager.handleTimeouts();

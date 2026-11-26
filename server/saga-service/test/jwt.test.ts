@@ -26,34 +26,30 @@ describe("validateToken middleware", () => {
         expect(res.body).toEqual({ user: { userId: 123456789 } });
     });
 
-    it("rejects a request without an Authorization header", async () => {
-        const res = await callProtected();
+    it.each([
+        ["no Authorization header", undefined, "Missing token"],
+        ["a token without the Bearer prefix", sign({ userId: 123456789 }), "Invalid token"],
+        ["a different scheme (Basic)", `Basic ${sign({ userId: 123456789 })}`, "Invalid token"],
+        ["garbage that is not a JWT", "Bearer not-a-real-token", "Unauthorized: Invalid token"],
+        [
+            "a token signed with a different secret",
+            `Bearer ${sign({ userId: 123456789 }, "another-secret")}`,
+            "Unauthorized: Invalid token",
+        ],
+        [
+            "a token signed with another algorithm",
+            `Bearer ${sign({ userId: 123456789 }, config.JWT_SECRET, { algorithm: "HS512" })}`,
+            "Unauthorized: Invalid token",
+        ],
+        [
+            "an expired token",
+            `Bearer ${sign({ userId: 123456789 }, config.JWT_SECRET, { expiresIn: -10 })}`,
+            "Unauthorized: Token expired",
+        ],
+    ])("rejects %s with 401 and says why, without internal details", async (_label, authorization, error) => {
+        const res = await callProtected(authorization);
         expect(res.status).toBe(401);
-    });
-
-    it("rejects a token without the Bearer prefix", async () => {
-        const res = await callProtected(sign({ userId: 123456789 }));
-        expect(res.status).toBe(401);
-    });
-
-    it("rejects a different scheme (Basic)", async () => {
-        const res = await callProtected(`Basic ${sign({ userId: 123456789 })}`);
-        expect(res.status).toBe(401);
-    });
-
-    it("rejects a token signed with a different secret", async () => {
-        const res = await callProtected(`Bearer ${sign({ userId: 123456789 }, "another-secret")}`);
-        expect(res.status).toBe(401);
-    });
-
-    it("rejects an expired token", async () => {
-        const res = await callProtected(`Bearer ${sign({ userId: 123456789 }, config.JWT_SECRET, { expiresIn: -10 })}`);
-        expect(res.status).toBe(401);
-    });
-
-    it("rejects garbage that is not a JWT", async () => {
-        const res = await callProtected("Bearer not-a-real-token");
-        expect(res.status).toBe(401);
+        expect(res.body).toEqual({ error });
     });
 
     it.each([
@@ -63,10 +59,5 @@ describe("validateToken middleware", () => {
     ])("rejects a validly signed token whose userId %s", async (_label, payload) => {
         const res = await callProtected(`Bearer ${sign(payload)}`);
         expect(res.status).toBe(401);
-    });
-
-    it("never leaks internal details in the error body", async () => {
-        const res = await callProtected("Bearer not-a-real-token");
-        expect(res.body).toEqual({ error: "Invalid token" });
     });
 });

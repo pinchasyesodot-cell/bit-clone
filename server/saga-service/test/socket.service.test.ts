@@ -14,6 +14,7 @@ const { default: socketService } = await import("../src/service/socket.service.j
 let httpServer: Server;
 let port: number;
 const openClients: ClientSocket[] = [];
+const SAGA_ID = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 
 const tokenFor = (userId: number): string => jwt.sign({ userId }, config.JWT_SECRET);
 
@@ -65,9 +66,9 @@ describe("SocketService", () => {
         const client = await connect(tokenFor(111111111));
         const received = nextEvent<{ sagaId: string }>(client, "saga:completed");
 
-        socketService.emitToUser("111111111", "saga:completed", { sagaId: "saga-1" });
+        socketService.emitToUser("111111111", "saga:completed", { sagaId: SAGA_ID });
 
-        await expect(received).resolves.toEqual({ sagaId: "saga-1" });
+        await expect(received).resolves.toEqual({ sagaId: SAGA_ID });
     });
 
     it("does not deliver an event to a different user", async () => {
@@ -77,7 +78,7 @@ describe("SocketService", () => {
         const strangerListener = jest.fn();
         stranger.on("saga:failed", strangerListener);
 
-        socketService.emitToUser("111111111", "saga:failed", { sagaId: "saga-1" });
+        socketService.emitToUser("111111111", "saga:failed", { sagaId: SAGA_ID });
 
         await ownerReceived;
         await pause(100);
@@ -90,7 +91,7 @@ describe("SocketService", () => {
         const first = nextEvent(tabOne, "saga:processing");
         const second = nextEvent(tabTwo, "saga:processing");
 
-        socketService.emitToUser("111111111", "saga:processing", { sagaId: "saga-1" });
+        socketService.emitToUser("111111111", "saga:processing", { sagaId: SAGA_ID });
 
         await expect(Promise.all([first, second])).resolves.toHaveLength(2);
     });

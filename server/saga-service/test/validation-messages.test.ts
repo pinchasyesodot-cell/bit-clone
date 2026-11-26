@@ -28,6 +28,6 @@ describe("POST /api/saga: validation messages reach the client", () => {
     ])("answers 400 with the reason for %s", async (_label, body, reason) => {
         const res = await postSaga(body);
         expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(reason);
+        expect((res.body as { error: string }).error).toMatch(reason);
     });
 });

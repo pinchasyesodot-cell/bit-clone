@@ -9,8 +9,9 @@ jest.setTimeout(120_000);
 
 let mongod: MongoMemoryServer;
 
+const SAGA_ID = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 const makeSaga = (overrides: Partial<Saga> = {}): Saga => ({
-    sagaId: "saga-1",
+    sagaId: SAGA_ID,
     senderId: "111111111",
     receiverId: "222222222",
     amount: 100,
@@ -57,19 +58,19 @@ describe("SagaRepository.transition", () => {
     it("moves the saga when it is in one of the allowed states", async () => {
         await SagaRepository.create(makeSaga());
 
-        const updated = await SagaRepository.transition("saga-1", [SagaStatus.PENDING], SagaStatus.PROCESSING);
+        const updated = await SagaRepository.transition(SAGA_ID, [SagaStatus.PENDING], SagaStatus.PROCESSING);
 
         expect(updated?.status).toBe(SagaStatus.PROCESSING);
-        expect((await sagaModel.findOne({ sagaId: "saga-1" }))?.status).toBe(SagaStatus.PROCESSING);
+        expect((await sagaModel.findOne({ sagaId: SAGA_ID }))?.status).toBe(SagaStatus.PROCESSING);
     });
 
     it("returns null and leaves the saga alone when it is in a different state", async () => {
         await SagaRepository.create(makeSaga({ status: SagaStatus.COMPENSATING }));
 
-        const updated = await SagaRepository.transition("saga-1", [SagaStatus.PENDING], SagaStatus.PROCESSING);
+        const updated = await SagaRepository.transition(SAGA_ID, [SagaStatus.PENDING], SagaStatus.PROCESSING);
 
         expect(updated).toBeNull();
-        expect((await sagaModel.findOne({ sagaId: "saga-1" }))?.status).toBe(SagaStatus.COMPENSATING);
+        expect((await sagaModel.findOne({ sagaId: SAGA_ID }))?.status).toBe(SagaStatus.COMPENSATING);
     });
 
     it("returns null for a saga that does not exist", async () => {
@@ -81,8 +82,8 @@ describe("SagaRepository.transition", () => {
         await SagaRepository.create(makeSaga({ status: SagaStatus.PROCESSING }));
 
         const results = await Promise.all([
-            SagaRepository.transition("saga-1", [SagaStatus.PROCESSING], SagaStatus.COMPLETED),
-            SagaRepository.transition("saga-1", [SagaStatus.PROCESSING], SagaStatus.COMPENSATING),
+            SagaRepository.transition(SAGA_ID, [SagaStatus.PROCESSING], SagaStatus.COMPLETED),
+            SagaRepository.transition(SAGA_ID, [SagaStatus.PROCESSING], SagaStatus.COMPENSATING),
         ]);
 
         expect(results.filter((result) => result !== null)).toHaveLength(1);
@@ -125,11 +126,11 @@ describe("SagaRepository.findUnconfirmedRefunds", () => {
 describe("SagaRepository.refreshUpdatedAt", () => {
     it("refreshes updatedAt without changing the status", async () => {
         await SagaRepository.create(makeSaga({ status: SagaStatus.COMPENSATING }));
-        await ageSaga("saga-1", 60);
+        await ageSaga(SAGA_ID, 60);
         const cutoff = new Date(Date.now() - 10_000);
         expect(await SagaRepository.findUnconfirmedRefunds(cutoff)).toHaveLength(1);
 
-        const refreshed = await SagaRepository.refreshUpdatedAt("saga-1", SagaStatus.COMPENSATING);
+        const refreshed = await SagaRepository.refreshUpdatedAt(SAGA_ID, SagaStatus.COMPENSATING);
 
         expect(refreshed?.status).toBe(SagaStatus.COMPENSATING);
         expect(await SagaRepository.findUnconfirmedRefunds(cutoff)).toHaveLength(0);
@@ -137,12 +138,46 @@ describe("SagaRepository.refreshUpdatedAt", () => {
 
     it("returns null and changes nothing when the saga is in a different status", async () => {
         await SagaRepository.create(makeSaga({ status: SagaStatus.COMPLETED }));
-        await ageSaga("saga-1", 60);
+        await ageSaga(SAGA_ID, 60);
 
-        const refreshed = await SagaRepository.refreshUpdatedAt("saga-1", SagaStatus.COMPENSATING);
+        const refreshed = await SagaRepository.refreshUpdatedAt(SAGA_ID, SagaStatus.COMPENSATING);
 
         expect(refreshed).toBeNull();
-        const stored = await sagaModel.collection.findOne({ sagaId: "saga-1" });
-        expect(Date.now() - new Date(stored?.updatedAt).getTime()).toBeGreaterThan(30_000);
+        const stored = await sagaModel.collection.findOne({ sagaId: SAGA_ID });
+        expect(Date.now() - (stored?.updatedAt as Date).getTime()).toBeGreaterThan(30_000);
+    });
+});
+
+describe("idempotency key index", () => {
+    const KEY = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
+    const base = { receiverId: "987654321", amount: 100, status: SagaStatus.PENDING };
+
+    it("rejects a second saga with the same key from the same sender", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111", idempotencyKey: KEY });
+
+        await expect(
+            SagaRepository.create({ ...base, sagaId: "s-2", senderId: "111111111", idempotencyKey: KEY })
+        ).rejects.toMatchObject({ code: 11000 });
+    });
+
+    it("allows the same key for different senders", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111", idempotencyKey: KEY });
+
+        await expect(
+            SagaRepository.create({ ...base, sagaId: "s-2", senderId: "222222222", idempotencyKey: KEY })
+        ).resolves.toBeDefined();
+    });
+
+    it("allows any number of sagas without a key from the same sender", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111" });
+
+        await expect(SagaRepository.create({ ...base, sagaId: "s-2", senderId: "111111111" })).resolves.toBeDefined();
+    });
+
+    it("finds a saga by sender and key, and not by another sender", async () => {
+        await SagaRepository.create({ ...base, sagaId: "s-1", senderId: "111111111", idempotencyKey: KEY });
+
+        expect((await SagaRepository.findByIdempotencyKey("111111111", KEY))?.sagaId).toBe("s-1");
+        expect(await SagaRepository.findByIdempotencyKey("222222222", KEY)).toBeNull();
     });
 });

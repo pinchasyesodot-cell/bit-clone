@@ -67,14 +67,16 @@ Rules for the accounts service, all per `sagaId`:
 
 ## API
 
-| Method | Path        | Auth         | Body                                | Success                                   |
-| ------ | ----------- | ------------ | ----------------------------------- | ----------------------------------------- |
-| POST   | `/api/saga` | Bearer token | `{ receiverId (9 digits), amount }` | `201` with the saga                       |
-| GET    | `/health`   | none         | none                                | `200`, or `503` when the database is down |
+| Method | Path        | Auth         | Body                                | Success                                                                   |
+| ------ | ----------- | ------------ | ----------------------------------- | ------------------------------------------------------------------------- |
+| POST   | `/api/saga` | Bearer token | `{ receiverId (9 digits), amount }` | `201` with the saga (`200` when repeated with the same `Idempotency-Key`) |
+| GET    | `/health`   | none         | none                                | `200`, or `503` when the database is down                                 |
 
 `amount` is in agorot: a whole number from 1 to 100,000,000 (1,000,000 ₪). The client converts with `Math.round(shekels * 100)`. The sender is always the user in the token. A body with `senderId` or any other unknown field is rejected, and so is a transfer to yourself. Errors are JSON: `{ "error": "..." }`.
 
 If the debit command cannot be confirmed by the broker the request still answers `201`: the saga is stored and the timeout check resolves it.
+
+Send an `Idempotency-Key` header (a UUID, one per transfer the user means to make) to make retries safe: repeating the request with the same key returns the saga that was already created (`200`) instead of creating another. The same key with a different receiver or amount answers `422`.
 
 ### Live updates (Socket.IO)
 
@@ -82,16 +84,19 @@ Connect with `io(url, { auth: { token } })`. Each user receives events about the
 
 ## Configuration
 
-| Variable           | Meaning                                                                                                      |
-| ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `PORT`             | port the service listens on                                                                                  |
-| `NODE_ENV`         | `development`, `production` or `test`                                                                        |
-| `MONGO_URI`        | MongoDB connection string                                                                                    |
-| `RABBITMQ_URI`     | RabbitMQ connection string                                                                                   |
-| `URL_ACCOUNTS`     | base URL of the accounts service                                                                             |
-| `JWT_SECRET`       | signing secret, the same value in every service that verifies tokens                                         |
-| `URL_CLIENT`       | allowed origin of the web client (required)                                                                  |
-| `INTERNAL_API_KEY` | shared secret for the internal account-service endpoint; at least 32 characters, same value in both services |
+| Variable              | Meaning                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `PORT`                | port the service listens on                                                                                  |
+| `NODE_ENV`            | `development`, `production` or `test`                                                                        |
+| `MONGO_URI`           | MongoDB connection string                                                                                    |
+| `RABBITMQ_URI`        | RabbitMQ connection string                                                                                   |
+| `URL_ACCOUNTS`        | base URL of the accounts service                                                                             |
+| `JWT_SECRET`          | signing secret, the same value in every service that verifies tokens                                         |
+| `URL_CLIENT`          | allowed origin of the web client (required)                                                                  |
+| `INTERNAL_API_KEY`    | shared secret for the internal account-service endpoint; at least 32 characters, same value in both services |
+| `TRANSFER_RATE_LIMIT` | transfers a user may start per minute; more answer `429` (optional, default 10)                              |
+
+The rate limit is counted in memory, so each running instance counts on its own. Running more than one instance needs a shared store (for example Redis).
 
 If the connection to RabbitMQ is lost the service exits, so the container's restart policy starts it again.
 

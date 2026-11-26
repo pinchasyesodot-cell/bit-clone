@@ -1,8 +1,8 @@
 import { jest } from "@jest/globals";
 import { SagaStatus, type SagaCommand, type SagaResponse } from "../src/interfaces/SagaType.js";
 
-type FakeMessage = { content: Buffer; fields: { redelivered: boolean } };
-type Consumer = (msg: FakeMessage | null) => Promise<void>;
+type FakeMessage = { content: Buffer; fields: { redelivered: boolean; routingKey: string } };
+type Consumer = (msg: FakeMessage | null) => void;
 type Listener = (...args: unknown[]) => void;
 type ConfirmCallback = (error: unknown) => void;
 
@@ -55,6 +55,7 @@ const fakeConnection = {
     close: mockCloseConnection,
 };
 const mockConnect = jest.fn<(url: string) => Promise<typeof fakeConnection>>();
+const SAGA_ID = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 
 jest.unstable_mockModule("amqplib", () => ({ default: { connect: mockConnect } }));
 jest.unstable_mockModule("../src/utils/logger.js", () => ({
@@ -65,21 +66,30 @@ const { rabbitMQConfig } = await import("../src/config/rabbitmq.js");
 
 const command: SagaCommand = {
     type: "DEBIT_COMMAND",
-    payload: { sagaId: "saga-1", senderId: "111", receiverId: "222", amount: 5, status: SagaStatus.PENDING },
+    payload: { sagaId: SAGA_ID, senderId: "111", receiverId: "222", amount: 5, status: SagaStatus.PENDING },
 };
-const reply: SagaResponse = { type: "DEBIT_RESPONSE", payload: { sagaId: "saga-1", success: true } };
+const reply: SagaResponse = { type: "DEBIT_RESPONSE", payload: { sagaId: SAGA_ID, success: true } };
 
 const message = (content: string, redelivered = false): FakeMessage => ({
     content: Buffer.from(content),
-    fields: { redelivered },
+    fields: { redelivered, routingKey: "saga_response_queue" },
 });
 
 // Starts consuming and returns the function RabbitMQ would call for each incoming message.
-const startConsumer = async (callback: (msg: SagaResponse) => Promise<void>): Promise<Consumer> => {
+const startConsumer = async (callback: (msg: unknown) => Promise<void>): Promise<Consumer> => {
     await rabbitMQConfig.consumeMessages("saga_response_queue", callback);
     const consumer = mockChannelConsume.mock.calls[0]?.[1];
     if (!consumer) throw new Error("no consumer was registered");
     return consumer;
+};
+
+// The consumer no longer returns its work; wait for it to finish in the background.
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+// Records the step and resolves, like the real async function would.
+const record = (event: string) => () => {
+    events.push(event);
+    return Promise.resolve();
 };
 
 beforeEach(async () => {
@@ -93,11 +103,11 @@ beforeEach(async () => {
         done(null);
         return true;
     });
-    mockCancel.mockImplementation(async () => void events.push("cancel"));
+    mockCancel.mockImplementation(record("cancel"));
     mockAck.mockImplementation(() => void events.push("ack"));
-    mockCloseConsumeChannel.mockImplementation(async () => void events.push("close consume channel"));
-    mockClosePublishChannel.mockImplementation(async () => void events.push("close publish channel"));
-    mockCloseConnection.mockImplementation(async () => void events.push("close connection"));
+    mockCloseConsumeChannel.mockImplementation(record("close consume channel"));
+    mockClosePublishChannel.mockImplementation(record("close publish channel"));
+    mockCloseConnection.mockImplementation(record("close connection"));
     rabbitMQConfig.publishTimeoutMs = 5000;
     rabbitMQConfig.drainTimeoutMs = 5000;
     await rabbitMQConfig.close();
@@ -168,18 +178,19 @@ describe("publishMessage", () => {
 
 describe("consumeMessages", () => {
     it("declares a durable queue and takes one message at a time", async () => {
-        await startConsumer(async () => undefined);
+        await startConsumer(() => Promise.resolve());
 
         expect(mockAssertQueue).toHaveBeenCalledWith("saga_response_queue", { durable: true });
         expect(mockPrefetch).toHaveBeenCalledWith(1);
     });
 
     it("hands the parsed message to the callback and acknowledges it", async () => {
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockResolvedValue(undefined);
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockResolvedValue(undefined);
         const consumer = await startConsumer(callback);
         const incoming = message(JSON.stringify(reply));
 
-        await consumer(incoming);
+        consumer(incoming);
+        await settle();
 
         expect(callback).toHaveBeenCalledWith(reply);
         expect(mockAck).toHaveBeenCalledWith(incoming);
@@ -188,69 +199,105 @@ describe("consumeMessages", () => {
 
     it("acknowledges only after the callback has finished", async () => {
         let finish: () => void = () => undefined;
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockReturnValue(
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockReturnValue(
             new Promise<void>((resolve) => {
                 finish = resolve;
             })
         );
         const consumer = await startConsumer(callback);
 
-        const handling = consumer(message(JSON.stringify(reply)));
-        await Promise.resolve();
+        consumer(message(JSON.stringify(reply)));
+        await settle();
         expect(mockAck).not.toHaveBeenCalled();
 
         finish();
-        await handling;
+        await settle();
         expect(mockAck).toHaveBeenCalledTimes(1);
     });
 
     it("puts a failed message back once so it gets a second chance", async () => {
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockRejectedValue(new Error("mongo blip"));
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockRejectedValue(new Error("mongo blip"));
         const consumer = await startConsumer(callback);
         const incoming = message(JSON.stringify(reply), false);
 
-        await consumer(incoming);
+        consumer(incoming);
+        await settle();
 
         expect(mockNack).toHaveBeenCalledWith(incoming, false, true);
         expect(mockAck).not.toHaveBeenCalled();
     });
 
-    it("drops a message that already failed once (no endless retry loop)", async () => {
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockRejectedValue(new Error("still broken"));
+    it("dead-letters a message that already failed once (no endless retry loop)", async () => {
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockRejectedValue(new Error("still broken"));
         const consumer = await startConsumer(callback);
         const incoming = message(JSON.stringify(reply), true);
 
-        await consumer(incoming);
+        consumer(incoming);
+        await settle();
 
-        expect(mockNack).toHaveBeenCalledWith(incoming, false, false);
+        expect(mockSendToQueue).toHaveBeenCalledWith(
+            "saga_response_queue.dead",
+            incoming.content,
+            expect.objectContaining({
+                headers: { "x-error": "still broken", "x-original-queue": "saga_response_queue" },
+            }),
+            expect.any(Function)
+        );
+        expect(mockAck).toHaveBeenCalledWith(incoming);
+        expect(mockNack).not.toHaveBeenCalled();
     });
 
-    it("drops a message that is not valid JSON without calling the callback", async () => {
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockResolvedValue(undefined);
+    it("dead-letters a message that is not valid JSON without calling the callback", async () => {
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockResolvedValue(undefined);
         const consumer = await startConsumer(callback);
         const incoming = message("{not json");
 
-        await consumer(incoming);
+        consumer(incoming);
+        await settle();
 
         expect(callback).not.toHaveBeenCalled();
+        expect(mockSendToQueue).toHaveBeenCalledWith(
+            "saga_response_queue.dead",
+            incoming.content,
+            expect.anything(),
+            expect.any(Function)
+        );
+        expect(mockAck).toHaveBeenCalledWith(incoming);
+    });
+
+    it("drops the message if even the dead-letter copy cannot be confirmed", async () => {
+        mockSendToQueue.mockImplementationOnce((_queue, _content, _options, done) => {
+            done(new Error("broker refused"));
+            return true;
+        });
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockRejectedValue(new Error("still broken"));
+        const consumer = await startConsumer(callback);
+        const incoming = message(JSON.stringify(reply), true);
+
+        consumer(incoming);
+        await settle();
+
         expect(mockNack).toHaveBeenCalledWith(incoming, false, false);
+        expect(mockAck).not.toHaveBeenCalled();
     });
 
     it("does not crash when the channel is already closed while rejecting a message", async () => {
-        mockNack.mockImplementation(() => {
+        mockNack.mockImplementationOnce(() => {
             throw new Error("Channel closed");
         });
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockRejectedValue(new Error("boom"));
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockRejectedValue(new Error("boom"));
         const consumer = await startConsumer(callback);
 
-        await expect(consumer(message(JSON.stringify(reply)))).resolves.toBeUndefined();
+        expect(() => consumer(message(JSON.stringify(reply)))).not.toThrow();
+        await settle();
     });
 
     it("ignores the null that RabbitMQ sends when the consumer is cancelled", async () => {
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockResolvedValue(undefined);
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockResolvedValue(undefined);
         const consumer = await startConsumer(callback);
 
-        await consumer(null);
+        consumer(null);
+        await settle();
 
         expect(callback).not.toHaveBeenCalled();
         expect(mockAck).not.toHaveBeenCalled();
@@ -261,21 +308,20 @@ describe("consumeMessages", () => {
 describe("close", () => {
     it("stops taking messages, lets the one in progress finish, then closes everything in order", async () => {
         let finish: () => void = () => undefined;
-        const callback = jest.fn<(msg: SagaResponse) => Promise<void>>().mockReturnValue(
+        const callback = jest.fn<(msg: unknown) => Promise<void>>().mockReturnValue(
             new Promise<void>((resolve) => {
                 finish = resolve;
             })
         );
         const consumer = await startConsumer(callback);
         await rabbitMQConfig.publishMessage("debit_queue", command);
-        const handling = consumer(message(JSON.stringify(reply)));
+        consumer(message(JSON.stringify(reply)));
 
         const closing = rabbitMQConfig.close();
         await new Promise((resolve) => setTimeout(resolve, 20));
         expect(events).toEqual(["cancel"]);
 
         finish();
-        await handling;
         await closing;
 
         expect(events).toEqual(["cancel", "ack", "close consume channel", "close publish channel", "close connection"]);
@@ -311,7 +357,7 @@ describe("losing the broker", () => {
 
     it("exits when the broker closes the channel that receives the replies", async () => {
         const exit = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
-        await startConsumer(async () => undefined);
+        await startConsumer(() => Promise.resolve());
 
         consumeEvents.fire("close");
 
@@ -329,7 +375,10 @@ describe("losing the broker", () => {
 
     it("does not exit because of its own close()", async () => {
         const exit = jest.spyOn(process, "exit").mockImplementation((() => undefined) as never);
-        mockCloseConnection.mockImplementation(async () => connectionEvents.fire("close"));
+        mockCloseConnection.mockImplementation(() => {
+            connectionEvents.fire("close");
+            return Promise.resolve();
+        });
         await rabbitMQConfig.publishMessage("debit_queue", command);
 
         await rabbitMQConfig.close();

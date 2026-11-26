@@ -12,6 +12,7 @@ const sagaSchema = new Schema<Saga>(
             enum: Object.values(SagaStatus),
             default: SagaStatus.PENDING,
         },
+        idempotencyKey: { type: String },
     },
     {
         timestamps: true,
@@ -28,5 +29,9 @@ const sagaSchema = new Schema<Saga>(
 );
 
 sagaSchema.index({ status: 1, updatedAt: 1 });
+sagaSchema.index(
+    { senderId: 1, idempotencyKey: 1 },
+    { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } }
+);
 
 export const sagaModel = model<Saga>("Saga", sagaSchema);

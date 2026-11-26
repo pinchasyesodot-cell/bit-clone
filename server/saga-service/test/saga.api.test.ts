@@ -1,10 +1,12 @@
 import { jest } from "@jest/globals";
 import jwt from "jsonwebtoken";
 import { config } from "../src/config/env.js";
-import type { Saga } from "../src/interfaces/SagaType.js";
+import { SagaStatus, type Saga } from "../src/interfaces/SagaType.js";
+import { mongo } from "mongoose";
 
 const mockPublish = jest.fn<(queue: string, message: unknown) => Promise<void>>();
 const mockCreate = jest.fn<(saga: Saga) => Promise<Saga>>();
+const mockFind = jest.fn<(senderId: string, idempotencyKey: string) => Promise<Saga | null>>();
 
 jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
     rabbitMQConfig: { publishMessage: mockPublish, consumeMessages: jest.fn() },
@@ -12,6 +14,7 @@ jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
 jest.unstable_mockModule("../src/repository/saga.repository.js", () => ({
     SagaRepository: {
         create: mockCreate,
+        findByIdempotencyKey: mockFind,
         transition: jest.fn(),
         findTimedOutOpenSagas: jest.fn(),
         findUnconfirmedRefunds: jest.fn(),
@@ -26,16 +29,20 @@ const { default: request } = await import("supertest");
 const { default: server } = await import("../src/server.js");
 
 const SENDER_ID = 123456789;
+const KEY = "0193f2a4-6b1c-7d3e-a1b2-c3d4e5f60718";
 const token = jwt.sign({ userId: SENDER_ID }, config.JWT_SECRET);
 
-const postSaga = (body: unknown, authorization: string | null = `Bearer ${token}`) => {
-    const req = request(server).post("/api/saga");
-    return (authorization === null ? req : req.set("Authorization", authorization)).send(body as object);
+const postSaga = (body: unknown, authorization: string | null = `Bearer ${token}`, idempotencyKey?: string) => {
+    let req = request(server).post("/api/saga");
+    if (authorization !== null) req = req.set("Authorization", authorization);
+    if (idempotencyKey) req = req.set("Idempotency-Key", idempotencyKey);
+    return req.send(body as object);
 };
 
 describe("POST /api/saga", () => {
     beforeEach(() => {
-        mockCreate.mockImplementation(async (saga) => saga);
+        mockFind.mockResolvedValue(null);
+        mockCreate.mockImplementation((saga) => Promise.resolve(saga));
         mockPublish.mockResolvedValue(undefined);
     });
 
@@ -49,9 +56,10 @@ describe("POST /api/saga", () => {
             amount: 150,
             status: "PENDING",
         });
-        expect(typeof res.body.sagaId).toBe("string");
+        const saga = res.body as Saga;
+        expect(typeof saga.sagaId).toBe("string");
         expect(mockPublish).toHaveBeenCalledTimes(1);
-        expect(mockPublish).toHaveBeenCalledWith("debit_queue", { type: "DEBIT_COMMAND", payload: res.body });
+        expect(mockPublish).toHaveBeenCalledWith("debit_queue", { type: "DEBIT_COMMAND", payload: saga });
     });
 
     it("rejects a request without a token", async () => {
@@ -105,7 +113,7 @@ describe("POST /api/saga", () => {
         const res = await postSaga({ receiverId: "987654321", amount: 10 });
 
         expect(res.status).toBe(201);
-        expect(res.body.status).toBe("PENDING");
+        expect(res.body).toMatchObject({ status: "PENDING" });
         expect(JSON.stringify(res.body)).not.toContain("secret");
     });
 
@@ -122,5 +130,70 @@ describe("POST /api/saga", () => {
         const res = await request(server).get("/api/saga/does-not-exist");
         expect(res.status).toBe(404);
         expect(res.body).toEqual({ error: "Route not found" });
+    });
+
+    describe("Idempotency-Key", () => {
+        const existing = {
+            sagaId: "x",
+            senderId: String(SENDER_ID),
+            receiverId: "987654321",
+            amount: 150,
+            status: SagaStatus.PENDING,
+            idempotencyKey: KEY,
+        };
+
+        it("returns the saga created by a concurrent request with the same key", async () => {
+            mockFind.mockResolvedValueOnce(null).mockResolvedValueOnce(existing);
+            mockCreate.mockRejectedValueOnce(
+                new mongo.MongoServerError({ code: 11000, keyPattern: { senderId: 1, idempotencyKey: 1 } })
+            );
+
+            const res = await postSaga({ receiverId: "987654321", amount: 150 }, `Bearer ${token}`, KEY);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toMatchObject({ sagaId: "x" });
+            expect(mockPublish).not.toHaveBeenCalled();
+        });
+
+        it("stores the key with a new saga on first use", async () => {
+            const res = await postSaga({ receiverId: "987654321", amount: 150 }, `Bearer ${token}`, KEY);
+
+            expect(res.status).toBe(201);
+            expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ idempotencyKey: KEY }));
+        });
+
+        it("returns the saga already created for the same key instead of creating another", async () => {
+            mockFind.mockResolvedValueOnce(existing);
+
+            const res = await postSaga({ receiverId: "987654321", amount: 150 }, `Bearer ${token}`, KEY);
+
+            expect(res.status).toBe(200);
+            expect(res.body).toMatchObject({ sagaId: "x" });
+            expect(mockCreate).not.toHaveBeenCalled();
+            expect(mockPublish).not.toHaveBeenCalled();
+        });
+
+        it("answers 422 when the same key is reused for a different transfer", async () => {
+            mockFind.mockResolvedValueOnce(existing);
+
+            const res = await postSaga({ receiverId: "987654321", amount: 999 }, `Bearer ${token}`, KEY);
+
+            expect(res.status).toBe(422);
+            expect(mockCreate).not.toHaveBeenCalled();
+        });
+
+        it("rejects a key that is not a UUID", async () => {
+            const res = await postSaga({ receiverId: "987654321", amount: 150 }, `Bearer ${token}`, "not-a-uuid");
+
+            expect(res.status).toBe(400);
+            expect(mockCreate).not.toHaveBeenCalled();
+        });
+
+        it("does not look anything up when no key is sent", async () => {
+            const res = await postSaga({ receiverId: "987654321", amount: 150 });
+
+            expect(res.status).toBe(201);
+            expect(mockFind).not.toHaveBeenCalled();
+        });
     });
 });

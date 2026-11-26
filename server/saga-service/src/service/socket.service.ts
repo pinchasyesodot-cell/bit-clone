@@ -3,9 +3,10 @@ import type http from "node:http";
 import { logger } from "../utils/logger.js";
 import { config } from "../config/env.js";
 import { socketAuth } from "../middlewares/socketAuth.js";
+import type { AppServer } from "../types/socket.js";
 
 class SocketService {
-    private io: Server | null = null;
+    private io: AppServer | null = null;
 
     public initSocket = (httpServer: http.Server): void => {
         this.io = new Server(httpServer, {
@@ -18,7 +19,7 @@ class SocketService {
         this.io.use(socketAuth);
 
         this.io.on("connection", (socket) => {
-            const userId = socket.data.userId as string;
+            const { userId } = socket.data;
             void socket.join(userId);
             logger.info(`Client connected: ${socket.id} (user ${userId})`);
         });

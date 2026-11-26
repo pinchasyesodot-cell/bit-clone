@@ -7,7 +7,7 @@ export default tseslint.config(
     { ignores: ["dist/", "node_modules/", "coverage/"] },
 
     js.configs.recommended,
-    ...tseslint.configs.recommended,
+    ...tseslint.configs.recommendedTypeChecked,
     eslintPluginPrettierRecommended,
 
     {
@@ -15,6 +15,12 @@ export default tseslint.config(
             ecmaVersion: "latest",
             sourceType: "module",
             globals: { ...globals.node, ...globals.es2015 },
+            parserOptions: {
+                projectService: {
+                    allowDefaultProject: ["eslint.config.js", "jest.config.ts"],
+                },
+                tsconfigRootDir: import.meta.dirname,
+            },
         },
         rules: {
             "no-console": "off",
