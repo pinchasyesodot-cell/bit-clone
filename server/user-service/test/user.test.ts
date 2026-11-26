@@ -1,9 +1,18 @@
+import { jest } from "@jest/globals";
 import request from "supertest";
 import jwt from "jsonwebtoken";
-import server from "../src/server.js";
-import database from "../src/config/db.js";
-import { userModel } from "../src/models/User.js";
-import { config } from "../src/config/env.js";
+import type { UserCreatedEvent } from "../src/interfaces/userType.js";
+
+// The broker is replaced: these tests check what user-service sends, not RabbitMQ itself.
+const mockPublish = jest.fn<(queue: string, message: UserCreatedEvent) => Promise<void>>();
+jest.unstable_mockModule("../src/config/rabbitmq.js", () => ({
+    rabbitMQConfig: { publishMessage: mockPublish },
+}));
+
+const { default: server } = await import("../src/server.js");
+const { default: database } = await import("../src/config/db.js");
+const { userModel } = await import("../src/models/User.js");
+const { config } = await import("../src/config/env.js");
 
 const testUser = { userId: 123456789, userName: "testUser", password: "Test1234!" };
 const usedIds = [testUser.userId, 100000000, 999999999, 111111111, 987654321];
@@ -16,6 +25,11 @@ const assertTestDatabase = (): void => {
 assertTestDatabase();
 
 describe("User API Endpoints", () => {
+    beforeEach(() => {
+        mockPublish.mockReset();
+        mockPublish.mockResolvedValue(undefined);
+    });
+
     beforeAll(async () => {
         await database.connect();
         await userModel.deleteMany({ userId: { $in: usedIds } });
@@ -39,6 +53,41 @@ describe("User API Endpoints", () => {
         it("returns 409 status on duplicate userId", async () => {
             const response = await request(server).post("/api/users/").send(testUser);
             expect(response.status).toBe(409);
+        });
+
+        it("announces the new user to account-service with the ID as a 9-digit string", async () => {
+            const res = await request(server)
+                .post("/api/users")
+                .send({ userId: 100000000, userName: "announced", password: "Test1234!" });
+
+            expect(res.status).toBe(201);
+            expect(mockPublish).toHaveBeenCalledTimes(1);
+            expect(mockPublish).toHaveBeenCalledWith("user_created_queue", {
+                type: "USER_CREATED",
+                payload: { userId: "100000000" },
+            });
+            await userModel.deleteOne({ userId: 100000000 });
+        });
+
+        it("removes the user and fails when the broker does not confirm the event, so the signup can be retried", async () => {
+            const newcomer = { userId: 999999999, userName: "unlucky", password: "Test1234!" };
+            mockPublish.mockRejectedValueOnce(new Error("broker down"));
+
+            const failed = await request(server).post("/api/users").send(newcomer);
+
+            expect(failed.status).toBe(500);
+            expect(failed.body).toEqual({ error: "Internal Server Error" });
+            expect(await userModel.exists({ userId: newcomer.userId })).toBeNull();
+
+            const retried = await request(server).post("/api/users").send(newcomer);
+            expect(retried.status).toBe(201);
+            await userModel.deleteOne({ userId: newcomer.userId });
+        });
+
+        it("does not announce a user that was not created", async () => {
+            const res = await request(server).post("/api/users/").send(testUser);
+            expect(res.status).toBe(409);
+            expect(mockPublish).not.toHaveBeenCalled();
         });
 
         it("returns 400 status on empty body", async () => {

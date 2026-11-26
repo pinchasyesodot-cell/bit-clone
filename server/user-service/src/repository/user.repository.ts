@@ -20,4 +20,8 @@ export class UserRepository {
     static getUserLogin = async (userId: number): Promise<User | null> => {
         return await findByUserId(userId, `${EXCLUDED_FIELDS} +password`).exec();
     };
+
+    static deleteUser = async (userId: number): Promise<void> => {
+        await userModel.deleteOne({ userId }).exec();
+    };
 }

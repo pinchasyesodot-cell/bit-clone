@@ -3,6 +3,7 @@
 process.env.NODE_ENV = "test";
 process.env.PORT = "4001";
 // The user suite refuses to run unless the database name ends with -test.
-process.env.MONGO_URI = "mongodb://localhost:27017/user-service-test";
+process.env.MONGO_URI = "mongodb://localhost:27018/user-service-test";
 process.env.JWT_SECRET = "test-secret";
 process.env.URL_CLIENT = "http://localhost:3000";
+process.env.RABBITMQ_URI = "amqp://localhost";

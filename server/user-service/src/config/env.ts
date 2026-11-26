@@ -7,4 +7,5 @@ export const config = {
     MONGO_URI: env.get("MONGO_URI").required().asString(),
     JWT_SECRET: env.get("JWT_SECRET").required().asString(),
     URL_CLIENT: env.get("URL_CLIENT").required().asUrlObject().origin,
+    RABBITMQ_URI: env.get("RABBITMQ_URI").required().asString(),
 };
